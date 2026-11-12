@@ -263,6 +263,8 @@ class Monitor:
         with self.lock:
             rec = None
             if self.rec_writer:
+                # Flush every meter tick (~4 Hz): a crash loses at most ~0.25 s, and the reported size is real.
+                self.rec_file.flush()
                 rec = {"name": self.rec_name, "bytes": os.fstat(self.rec_file.fileno()).st_size,
                        **self.rec_stats.to_dict()}
             msg = {"type": "meter", "v": a.vbus, "i": a.ibus, "p": a.power,
