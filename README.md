@@ -1,5 +1,7 @@
 # POWER-Z KM003C Monitor
 
+**繁體中文** | [简体中文](README.zh-Hans.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
+
 在 macOS 上讀取 [ChargerLAB POWER-Z KM003C](https://www.chargerlab.com/) USB-C 功率計的網頁儀表板。直接透過 USB 跟裝置溝通，不需要官方的 Windows 軟體。可以即時看電壓、電流、功率曲線，錄製 CSV，以及擷取並解碼 USB PD 封包。
 
 ![POWER-Z Monitor 畫面](docs/live.png)
@@ -132,7 +134,7 @@ CSV 大小大約每筆 90 bytes：50 SPS 約 16 MB/小時，1000 SPS 約 320 MB/
 ## 注意事項
 
 - 同一時間只能有一個程式連著 POWER-Z，使用前請關閉其他讀取工具。
-- 用 1000 SPS 串流時，裝置不會更新溫度，畫面上顯示的是開始串流前的最後一筆。
+- 串流期間（任何取樣率）裝置不會更新溫度，畫面上顯示的是開始串流前的最後一筆。
 - 只在 macOS 上測試過。Linux 理論上可以執行，但可能需要設定 udev 權限，或先解除綁定核心內建的 `powerz` hwmon 驅動。
 
 ## 專案結構
@@ -155,3 +157,7 @@ PowerZ Monitor.command   macOS 雙擊啟動腳本
 ## 免責聲明
 
 這是非官方專案，與 ChargerLAB 無關。POWER-Z 是 ChargerLAB 的商標。協定是根據第三方逆向工程的資料實作的，不保證適用於所有韌體版本。
+
+## 授權
+
+[MIT License](LICENSE)
