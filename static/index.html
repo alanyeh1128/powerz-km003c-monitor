@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POWER-Z Monitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%23eb6834%22/%3E%3Cpath d=%22M13 3 5 14h6l-1 7 8-11h-6z%22 fill=%22white%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/uPlot.min.css">
+<script src="/static/uPlot.iife.min.js"></script>
+<script>
+  // Set the theme before first paint so neither the page nor the charts flash the wrong colors.
+  (() => { let t = null; try { t = localStorage.getItem('powerz.theme'); } catch (e) {}
+    document.documentElement.dataset.theme = t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f4f6; --surface: #fcfcfb; --surface-2: #f6f6f4; --border: #e4e4e0; --grid: #ececE8;
+    --text: #0b0b0b; --text-2: #52514e; --muted: #85837d;
+    --accent: #2a78d6; --accent-soft: #2a78d61a;
+    --good: #1f8a4c; --bad: #d03a39; --warn: #b77800; --rec: #ff3b30;
+    --s-v: #2a78d6; --s-p: #eb6834; --s-i: #1baf7a;
+    --s-dp: #e87ba4; --s-dm: #008300; --s-cc1: #6250d6; --s-cc2: #eda100;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #111110; --surface: #1a1a19; --surface-2: #222220; --border: #2e2e2b; --grid: #262624;
+      --text: #f0efec; --text-2: #c3c2b7; --muted: #8d8c85;
+      --accent: #3987e5; --accent-soft: #3987e526;
+      --good: #3fb874; --bad: #e66767; --warn: #e0a42e; --rec: #ff453a;
+      --s-v: #3987e5; --s-p: #d95926; --s-i: #199e70;
+      --s-dp: #d55181; --s-dm: #008300; --s-cc1: #9085e9; --s-cc2: #c98500;
+      --shadow: none;
+    }
+  }
+  /* Explicit choice from the theme toggle (same dark values as above). */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --surface-2: #222220; --border: #2e2e2b; --grid: #262624;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8d8c85;
+    --accent: #3987e5; --accent-soft: #3987e526;
+    --good: #3fb874; --bad: #e66767; --warn: #e0a42e; --rec: #ff453a;
+    --s-v: #3987e5; --s-p: #d95926; --s-i: #199e70;
+    --s-dp: #d55181; --s-dm: #008300; --s-cc1: #9085e9; --s-cc2: #c98500;
+    --shadow: none;
+  }
+  .prefs { display: flex; align-items: center; gap: 8px; }
+  #langSel { height: 32px; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 0 8px; color: var(--text-2); cursor: pointer; }
+  #langSel:hover { border-color: var(--muted); }
+  #themeBtn { width: 32px; height: 32px; border-color: var(--border); border-radius: 8px; background: var(--surface); }
+  #themeBtn svg { width: 16px; height: 16px; }
+  #themeBtn .sun, :root[data-theme="dark"] #themeBtn .moon { display: none; }
+  :root[data-theme="dark"] #themeBtn .sun { display: block; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", sans-serif; }
+  .num { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  button, input, select { font: inherit; color: inherit; }
+
+  /* ---------- top bar ---------- */
+  .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            padding: 10px 20px; background: color-mix(in srgb, var(--surface) 88%, transparent);
+            backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; letter-spacing: .2px; }
+  .brand .logo { width: 26px; height: 26px; border-radius: 7px; background: var(--s-p); display: grid; place-items: center; }
+  .brand .logo svg { width: 15px; height: 15px; fill: #fff; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+          background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: 12px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
+  .dot.ok { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+  .spacer { flex: 1; }
+  .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer; color: var(--text-2); white-space: nowrap; }
+  .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
+  .seg button:disabled { opacity: .4; cursor: not-allowed; }
+  .lbl { color: var(--muted); font-size: 12px; margin-right: 6px; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #recBtn { color: var(--rec); font-weight: 600; border-color: color-mix(in srgb, var(--rec) 45%, transparent); }
+  #recBtn:hover { background: color-mix(in srgb, var(--rec) 10%, var(--surface)); border-color: var(--rec); }
+  #recBtn.rec { background: var(--rec); border-color: var(--rec); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+  .btn.ghost:hover { background: var(--surface-2); }
+  input[type=text] { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 10px; min-width: 0; }
+  input[type=text]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .recbox { display: flex; align-items: center; gap: 8px; }
+  .recbox input { width: 215px; }
+  .rec-timer { color: var(--rec); font-weight: 600; display: none; align-items: center; gap: 6px; }
+  .rec-timer.on { display: inline-flex; }
+  .rec-timer .dot { background: var(--rec); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tabs button { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--text-2);
+                 border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px;
+           background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; color: var(--text-2); }
+  main { padding: 16px 20px 32px; max-width: 1600px; margin: 0 auto; }
+  .tab { display: none; } .tab.on { display: block; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+
+  /* ---------- live layout ---------- */
+  .live { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .live { grid-template-columns: 1fr; } }
+  .meters { display: grid; gap: 12px; }
+  .big { padding: 14px 16px; position: relative; overflow: hidden; }
+  .big::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
+  .big .name { display: flex; justify-content: space-between; color: var(--text-2); font-size: 12px; font-weight: 600; letter-spacing: .4px; }
+  .big .value { font-size: 34px; font-weight: 600; line-height: 1.15; margin-top: 4px; letter-spacing: -.5px; }
+  .big .value .u { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+  .big .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .big.half { padding: 12px 12px 12px 14px; }
+  .big.half::before { top: 12px; bottom: 12px; }
+  .big.half .value { font-size: 23px; letter-spacing: -.3px; white-space: nowrap; }
+  .big.half .value .u { font-size: 12px; margin-left: 3px; }
+  .big.half .sub { font-size: 11px; white-space: nowrap; }
+  .mini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+  .mini > div { background: var(--surface); padding: 6px 8px; }
+  .mini .k { color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 4px; }
+  .mini .k i { width: 6px; height: 6px; border-radius: 2px; background: var(--c); }
+  .mini .v { font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+  .acc { padding: 12px 14px; }
+  .acc h3, .panel-h h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: .4px; }
+  .acc .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+  .acc .row:last-child { border-bottom: 0; }
+  .acc .row span:first-child { color: var(--muted); }
+  .acc .row span:last-child { font-weight: 600; }
+  .batt .row { align-items: center; }
+  .batt input, .batt select { width: 96px; text-align: right; border: 1px solid var(--border); background: var(--surface-2);
+                              border-radius: 6px; padding: 3px 6px; font-weight: 600; }
+  .batt select { width: auto; text-align: left; font-weight: 500; }
+  .batt input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .batt .runtime { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .batt .runtime span { color: var(--muted); }
+  .batt .runtime b { font-size: 22px; font-weight: 600; }
+
+  .panel-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .chans { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .chans label { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border);
+                 cursor: pointer; user-select: none; color: var(--text-2); font-size: 12px; }
+  .chans label i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+  .chans input { display: none; }
+  .chans label:has(input:not(:checked)) { opacity: .45; }
+  .chans label:has(input:not(:checked)) i { background: transparent; outline: 1px solid var(--muted); }
+  .live-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--good); font-weight: 600; }
+  .live-pill.off { color: var(--warn); }
+  /* Both states share one grid cell, so the box is always as wide as the wider state and the toolbar never reflows. */
+  .livebox { display: inline-grid; align-items: center; }
+  .livebox > * { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 8px; }
+  .livebox .st-frozen, .livebox.frozen .st-live { visibility: hidden; }
+  .livebox.frozen .st-frozen { visibility: visible; }
+
+  .charts { padding: 6px 6px 0; }
+  .chart { position: relative; padding: 0 0 4px; border-bottom: 1px solid var(--border); }
+  .chart:last-child { border-bottom: 0; }
+  .chart.hidden { display: none; }
+  .chart-h { display: flex; gap: 14px; align-items: baseline; padding: 6px 10px 0; font-size: 12px; flex-wrap: wrap; }
+  .chart-h .t { font-weight: 600; color: var(--text-2); }
+  .chart-h .s { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); cursor: default; }
+  .chart-h .s i { width: 10px; height: 3px; border-radius: 2px; background: var(--c); }
+  .chart-h .s b { color: var(--text); font-weight: 600; min-width: 64px; }
+  .chart-h .s.toggle { cursor: pointer; } .chart-h .s.off { opacity: .4; }
+  .uplot, .u-wrap { font-family: inherit; }
+  .u-select { background: var(--accent-soft) !important; border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); }
+  .u-cursor-x { border-right: 1px dashed var(--muted) !important; }
+  .u-cursor-y { display: none; }
+
+  /* Always a single row: columns share the width, scroll sideways only if the panel is very narrow. */
+  .rstats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); overflow-x: auto;
+            border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .rstats div { padding: 7px 12px; border-right: 1px solid var(--border); white-space: nowrap; text-align: center; }
+  .rstats div:last-child { border-right: 0; }
+  .rstats span { display: block; color: var(--muted); font-size: 10.5px; }
+  .rstats b { font-size: 13px; font-weight: 600; }
+  .rhint { padding: 5px 14px; border-bottom: 1px solid var(--border); font-size: 11.5px; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 600; font-size: 11px; color: var(--muted);
+       letter-spacing: .3px; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; z-index: 1; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.sel { background: var(--accent-soft); }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .empty { color: var(--muted); text-align: center; padding: 40px !important; }
+
+  /* PD */
+  .pd { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
+  @media (max-width: 1100px) { .pd { grid-template-columns: 1fr; } }
+  .pd .tbl-wrap { max-height: calc(100vh - 210px); }
+  .pd tbody tr { cursor: pointer; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); }
+  .tag.src { color: var(--s-p); border-color: color-mix(in srgb, var(--s-p) 40%, transparent); }
+  .tag.snk { color: var(--s-v); border-color: color-mix(in srgb, var(--s-v) 40%, transparent); }
+  .tag.ev { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+  tr.conn td { color: var(--good); font-weight: 600; }
+  .msg-name { font-weight: 600; }
+  .msg-name.ctrl { font-weight: 500; color: var(--text-2); }
+  .detail { padding: 14px 16px; position: sticky; top: 110px; }
+  .detail h2 { margin: 0 0 4px; font-size: 16px; }
+  .kv { display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; margin: 12px 0; font-size: 12px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .pdo { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+  .pdo .h { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .pdo .b { font-weight: 600; font-size: 14px; margin-top: 2px; }
+  .pdo .f { margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .raw { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; word-break: break-all; white-space: normal; }
+  .chk { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 12px; cursor: pointer; }
+
+  .banner { display: none; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+            background: color-mix(in srgb, var(--bad) 8%, var(--surface)); color: var(--text); }
+  .banner.on { display: block; }
+  .banner.alert.on { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+  .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); font-weight: 600; }
+  .fname-cell { display: flex; align-items: center; gap: 0; }
+  .fname { font-weight: 600; cursor: text; border-bottom: 1px dashed transparent; }
+  .fname:hover { border-bottom-color: var(--muted); }
+  .ext { color: var(--muted); }
+  input.rename { padding: 2px 6px; width: 280px; font-weight: 600; }
+  .pdlink { margin-left: 8px; cursor: pointer; }
+  .pdlink:hover { border-color: var(--muted); }
+  td.acts { text-align: right; white-space: nowrap; padding-top: 3px; padding-bottom: 3px; }
+  button.icon { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 6px;
+                background: transparent; color: var(--text-2); cursor: pointer; padding: 0; }
+  button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  button.icon:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+  button.icon.export { width: 26px; height: 24px; margin-left: -4px; border-color: var(--border); border-radius: 999px; }
+  button.icon.danger:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+    POWER-Z Monitor
+  </div>
+  <span class="chip" id="devChip"><span class="dot" id="dot"></span><span id="devText" data-i18n="connecting">連線中…</span></span>
+  <span class="chip num" id="modeChip" style="display:none"></span>
+  <div class="spacer"></div>
+  <div><span class="lbl" data-i18n="rate">取樣率</span><span class="seg" id="rateSeg"></span></div>
+  <div class="recbox">
+    <span class="chip num" id="diskChip" style="display:none"></span>
+    <span class="rec-timer num" id="recTimer"><span class="dot"></span><span id="recTime">00:00</span></span>
+    <input type="text" id="recLabel" data-i18n-ph="rec.placeholder" placeholder="測試項目，如 device_idle">
+    <button class="btn" id="recBtn">● 錄製</button>
+  </div>
+  <div class="prefs">
+    <select id="langSel" data-i18n-title="lang">
+      <option value="zh-Hant">繁體中文</option>
+      <option value="zh-Hans">简体中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+    </select>
+    <button class="icon" id="themeBtn" data-i18n-title="theme" title="切換深色 / 淺色模式" aria-label="切換深色 / 淺色模式">
+      <svg class="moon" viewBox="0 0 16 16"><path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z"/></svg>
+      <svg class="sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>
+    </button>
+  </div>
+</header>
+<nav class="tabs">
+  <button class="on" data-tab="live"><span data-i18n="tab.live">即時監測</span></button>
+  <button data-tab="pd"><span data-i18n="tab.pd">PD 分析</span><span class="badge num" id="pdCount">0</span></button>
+  <button data-tab="rec"><span data-i18n="tab.rec">錄製紀錄</span><span class="badge num" id="recCount">0</span></button>
+</nav>
+
+<main>
+  <div class="banner" id="banner"></div>
+  <div class="banner alert" id="alertBanner"><span id="alertText"></span><button class="btn ghost" id="alertClose" data-i18n="alert.ok">知道了</button></div>
+
+  <!-- ================= LIVE ================= -->
+  <section class="tab on" id="tab-live">
+    <div class="live">
+      <aside class="meters">
+        <div class="card big" style="--c: var(--s-p)">
+          <div class="name"><span>POWER</span><span id="dirTag" class="hint"></span></div>
+          <div class="value num"><span id="mP">—</span><span class="u">W</span></div>
+          <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mPa">—</span> W</div>
+        </div>
+        <div class="pair">
+          <div class="card big half" style="--c: var(--s-v)">
+            <div class="name"><span>VBUS</span></div>
+            <div class="value num"><span id="mV">—</span><span class="u">V</span></div>
+            <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mVa">—</span> V</div>
+          </div>
+          <div class="card big half" style="--c: var(--s-i)">
+            <div class="name"><span>IBUS</span></div>
+            <div class="value num"><span id="mI">—</span><span class="u">A</span></div>
+            <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mIa">—</span> A</div>
+          </div>
+        </div>
+        <div class="mini">
+          <div style="--c: var(--s-dp)"><div class="k"><i></i>D+</div><div class="v num"><span id="mDp">—</span> V</div></div>
+          <div style="--c: var(--s-dm)"><div class="k"><i></i>D−</div><div class="v num"><span id="mDm">—</span> V</div></div>
+          <div style="--c: var(--s-cc1)"><div class="k"><i></i>CC1</div><div class="v num"><span id="mCc1">—</span> V</div></div>
+          <div style="--c: var(--s-cc2)"><div class="k"><i></i>CC2</div><div class="v num"><span id="mCc2">—</span> V</div></div>
+        </div>
+        <div class="card acc">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <h3 data-i18n="acc.title">累計（自啟動 / 歸零）</h3><button class="btn ghost" id="resetBtn" data-i18n="acc.reset">歸零</button>
+          </div>
+          <div class="row"><span data-i18n="acc.time">時間</span><span class="num" id="aT">—</span></div>
+          <div class="row"><span data-i18n="acc.charge">電量</span><span class="num"><span id="aAh">—</span> mAh</span></div>
+          <div class="row"><span data-i18n="acc.energy">能量</span><span class="num"><span id="aWh">—</span> mWh</span></div>
+          <div class="row"><span data-i18n="acc.avgW">平均功率</span><span class="num"><span id="aW">—</span> W</span></div>
+          <div class="row"><span data-i18n="acc.maxW">峰值功率</span><span class="num"><span id="aMax">—</span> W</span></div>
+          <div class="row"><span data-i18n="acc.temp">溫度</span><span class="num"><span id="mTemp">—</span> °C</span></div>
+          <div class="row"><span data-i18n="acc.dropped">遺失樣本</span><span class="num" id="aDrop">0</span></div>
+        </div>
+        <div class="card acc batt">
+          <h3 style="margin-bottom:6px" data-i18n="bat.title">電池續航推算</h3>
+          <div class="row"><span data-i18n="bat.cap">電池容量</span><span><input type="number" id="bCap" min="1" step="100" class="num"> mAh</span></div>
+          <div class="row"><span data-i18n="bat.volt">電芯電壓</span><span><input type="number" id="bVolt" min="0.1" step="0.05" class="num"> V</span></div>
+          <div class="row"><span data-i18n="bat.eff">轉換效率</span><span><input type="number" id="bEff" min="1" max="100" step="1" class="num"> %</span></div>
+          <div class="row"><span data-i18n="bat.basis">依據</span><span><select id="bBasis"><option value="session" data-i18n="bat.basis.session">累計平均功率</option><option value="range" data-i18n="bat.basis.range">畫面區間平均</option></select></span></div>
+          <div class="row"><span data-i18n="bat.wh">可用能量</span><span class="num"><span id="bWh">—</span> Wh</span></div>
+          <div class="row"><span data-i18n="bat.avgW">平均功率</span><span class="num"><span id="bW">—</span> W</span></div>
+          <div class="runtime">
+            <span data-i18n="bat.runtime">預估續航</span>
+            <b class="num" id="bTime">—</b>
+          </div>
+          <div class="hint" data-i18n="bat.formula">容量 × 電芯電壓 × 效率 ÷ 平均功率</div>
+        </div>
+      </aside>
+
+      <section class="card">
+        <div class="panel-h">
+          <div><span class="lbl" data-i18n="win.label">時間窗</span><span class="seg" id="winSeg"></span></div>
+          <span class="livebox" id="liveBox">
+            <span class="st-live live-pill"><span class="dot ok"></span><span data-i18n="live.on">即時</span></span>
+            <span class="st-frozen"><span class="live-pill off" data-i18n="live.frozen">⏸ 已凍結（檢視區間）</span><button class="btn" id="liveBtn" data-i18n="live.back">回到即時</button></span>
+          </span>
+          <div class="spacer"></div>
+          <div class="chans" id="chans"></div>
+          <button class="icon export" id="exportView" data-i18n-title="export.view" title="匯出畫面 CSV（目前畫面範圍的原始資料）" aria-label="匯出畫面 CSV">
+            <svg viewBox="0 0 16 16"><path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M9.5 1.5V5H13M8 7.5v4.5M6 10l2 2 2-2"/></svg>
+          </button>
+        </div>
+        <div class="rstats num" id="rstats"></div>
+        <div class="hint rhint" data-i18n="chart.hint">在圖上拖曳可放大區間（所有圖同步），雙擊回到即時。上方統計為目前畫面範圍。</div>
+        <div class="charts" id="charts"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ================= PD ================= -->
+  <section class="tab" id="tab-pd">
+    <div class="pd">
+      <section class="card">
+        <div class="panel-h">
+          <h3 data-i18n="pd.title">PD 封包</h3>
+          <span class="hint" data-i18n="pd.hint">插拔或重新協商時會擷取到 PD 訊息</span>
+          <div class="spacer"></div>
+          <label class="chk"><input type="checkbox" id="hideCrc"> <span data-i18n="pd.hideCrc">隱藏 GoodCRC</span></label>
+          <label class="chk"><input type="checkbox" id="pdFollow" checked> <span data-i18n="pd.follow">自動捲動</span></label>
+          <a class="btn" href="/api/pd.csv" data-i18n="pd.export">匯出 CSV</a>
+          <button class="btn" id="pdClear" data-i18n="pd.clear">清除</button>
+        </div>
+        <div class="tbl-wrap" id="pdWrap">
+          <table>
+            <thead><tr><th class="r">#</th><th class="r" data-i18n="pd.h.time">時間 (s)</th><th>SOP</th><th data-i18n="pd.h.role">角色</th><th data-i18n="pd.h.msg">訊息</th><th class="r">ID</th><th data-i18n="pd.h.content">內容</th><th class="r">VBUS</th></tr></thead>
+            <tbody id="pdBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <aside class="card detail" id="pdDetail"></aside>
+    </div>
+  </section>
+
+  <!-- ================= RECORDS ================= -->
+  <section class="tab" id="tab-rec">
+    <section class="card">
+      <div class="panel-h"><h3 data-i18n="tab.rec">錄製紀錄</h3><span class="hint" data-i18n="rec.hint">點檔名可改名 · 檔案位於專案 logs/ 資料夾，彙總在 logs/summary.csv</span>
+        <div class="spacer"></div><span class="hint num" id="recTotal"></span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th data-i18n="rec.h.file">檔案</th><th data-i18n="rec.h.start">開始時間</th><th class="r" data-i18n="rec.h.dur">時長</th><th class="r">SPS</th><th class="r" data-i18n="rs.avgV">平均 V</th><th class="r" data-i18n="rs.avgA">平均 A</th>
+            <th class="r" data-i18n="rs.avgW">平均 W</th><th class="r" data-i18n="rs.minW">最小 W</th><th class="r" data-i18n="rs.maxW">最大 W</th><th class="r" data-i18n="rs.mWh">能量 mWh</th><th class="r" data-i18n="rs.mAh">電量 mAh</th><th class="r">PD</th>
+            <th class="r" data-i18n="rec.h.size">大小</th><th></th></tr></thead>
+          <tbody id="recBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="/static/i18n.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify(body || {}) }).then(r => r.json());
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtDur = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(x).padStart(2, '0'); };
+const f = (x, d) => (x == null || isNaN(x)) ? '—' : x.toFixed(d);
+
+/* ================= i18n ================= */
+let lang = 'zh-Hant';
+try { lang = localStorage.getItem('powerz.lang') || lang; } catch (e) {}
+if (!I18N[lang]) lang = 'zh-Hant';
+function t(key, params) {
+  let s = I18N[lang][key] ?? I18N['zh-Hant'][key] ?? key;
+  for (const [k, v] of Object.entries(params || {})) s = s.replaceAll(`{${k}}`, v);
+  return s;
+}
+// Server errors carry a code + params; fall back to the server's own (zh-Hant) text for unknown codes.
+const errMsg = r => (r.code && I18N[lang]['err.' + r.code]) ? t('err.' + r.code, r.params) : (r.error || r.message || '');
+function applyI18n() {
+  document.documentElement.lang = lang;
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-title]')) { el.title = t(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); }
+  for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
+}
+applyI18n();
+
+/* ================= data buffer ================= */
+const KEYS = ['t', 'v', 'i', 'p', 'dp', 'dm', 'cc1', 'cc2'];
+const MAX_PTS = 600000;
+const B = Object.fromEntries(KEYS.map(k => [k, []]));
+function append(d) {
+  for (const k of KEYS) { const src = k === 'i' ? d.i.map(Math.abs) : d[k]; for (const x of src) B[k].push(x); }
+  if (B.t.length > MAX_PTS * 1.1) { const n = B.t.length - MAX_PTS; for (const k of KEYS) B[k].splice(0, n); }
+}
+function lowerBound(arr, x) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] < x) lo = m + 1; else hi = m; } return lo; }
+
+/* ================= charts ================= */
+const CHARTS = [
+  { id: 'p',  title: 'Power',  unit: 'W', h: 210, series: [['p', 'Power', '--s-p', 3]] },
+  { id: 'v',  title: 'VBUS',   unit: 'V', h: 150, series: [['v', 'VBUS', '--s-v', 3]] },
+  { id: 'i',  title: 'IBUS',   unit: 'A', h: 150, series: [['i', 'IBUS', '--s-i', 4]] },
+  { id: 'dl', title: 'D± / CC', unit: 'V', h: 110, series: [['dp', 'D+', '--s-dp', 3], ['dm', 'D−', '--s-dm', 3], ['cc1', 'CC1', '--s-cc1', 3], ['cc2', 'CC2', '--s-cc2', 3]] },
+];
+const WINDOWS = [[10, '10s'], [30, '30s'], [60, '1m'], [300, '5m'], [900, '15m'], [0, '全部']];
+let winSec = 60, live = true, view = null; // view = [x0, x1] when zoomed
+const plots = {};
+
+function fmtTick(v, incr) {
+  const d = new Date(v * 1000), p = n => String(n).padStart(2, '0');
+  const hms = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return incr < 1 ? hms + '.' + String(d.getMilliseconds()).padStart(3, '0') : hms;
+}
+let zoomLock = false;
+function axisOpts(unit) {
+  const stroke = cssVar('--muted'), grid = cssVar('--grid');
+  return [
+    { stroke, grid: { stroke: grid, width: 1 }, ticks: { stroke: grid }, font: '11px ui-monospace, Menlo', space: 80, size: 30,
+      values: (u, vals, ai, space, incr) => vals.map(v => fmtTick(v, incr)) },
+    { stroke, grid: { stroke: grid, width: 1 }, ticks: { show: false }, font: '11px ui-monospace, Menlo', size: 58,
+      values: (u, vals) => vals.map(v => +v.toFixed(4)) },
+  ];
+}
+
+function buildCharts() {
+  const host = $('charts');
+  host.innerHTML = '';
+  for (const c of CHARTS) {
+    const box = document.createElement('div');
+    box.className = 'chart'; box.id = 'chart-' + c.id;
+    const head = document.createElement('div');
+    head.className = 'chart-h';
+    head.innerHTML = (c.series.length > 1 ? `<span class="t">${c.title}</span>` : '') + c.series.map((s, k) =>
+      `<span class="s ${c.series.length > 1 ? 'toggle' : ''}" data-k="${k}" style="--c: var(${s[2]})"><i></i>${s[1]} <b class="num"><span id="cv-${s[0]}">—</span> ${c.unit}</b></span>`).join('');
+    box.append(head);
+    const el = document.createElement('div');
+    box.append(el);
+    host.append(box);
+    const u = new uPlot({
+      width: el.clientWidth || 800, height: c.h,
+      legend: { show: false },
+      padding: [8, 12, 0, 0],
+      cursor: { sync: { key: 'pz' }, drag: { x: true, y: false, setScale: false }, points: { size: 6 } },
+      scales: { x: { time: true }, y: { range: (u, mn, mx) => stableRange(c, mn, mx) } },
+      axes: axisOpts(c.unit),
+      series: [{}, ...c.series.map(s => ({ label: s[1], stroke: cssVar(s[2]), width: 1.5,
+        fill: c.id === 'p' ? cssVar(s[2]) + '1f' : undefined, points: { show: false } }))],
+      hooks: {
+        setSelect: [u => { if (u.select.width > 4 && !zoomLock) { zoomLock = true; setTimeout(() => zoomLock = false, 50); zoomTo(u.posToVal(u.select.left, 'x'), u.posToVal(u.select.left + u.select.width, 'x')); }
+                           u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false); }],
+        setCursor: [u => showCursorValues(u, c)],
+        draw: [u => drawAvg(u, c)],
+      },
+    }, [[], ...c.series.map(() => [])], el);
+    el.addEventListener('dblclick', goLive);
+    head.querySelectorAll('.s.toggle').forEach(sp => sp.onclick = () => {
+      const k = +sp.dataset.k + 1, show = !u.series[k].show;
+      u.setSeries(k, { show }); sp.classList.toggle('off', !show);
+    });
+    plots[c.id] = { u, c, box };
+  }
+  applyChanVisibility();
+}
+
+function showCursorValues(u, c) {
+  const idx = u.cursor.idx;
+  c.series.forEach((s, k) => {
+    const arr = u.data[k + 1];
+    const v = idx != null ? arr[idx] : (B[s[0]].length ? B[s[0]][B[s[0]].length - 1] : null);
+    $('cv-' + s[0]).textContent = f(v, s[3]);
+  });
+}
+
+/* Y range snapped to nice ticks with hysteresis: grow at once, shrink only when the data needs < half the span,
+   so the axis doesn't rescale every frame as samples scroll in and out. */
+function niceStep(x) { const p = 10 ** Math.floor(Math.log10(x)), m = x / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
+function stableRange(c, mn, mx) {
+  if (mn == null || mx == null || !isFinite(mn) || !isFinite(mx)) return c.yr || [0, 1];
+  if (c.id === 'p' || c.id === 'i') mn = Math.min(0, mn);
+  const span = mx - mn > 0 ? mx - mn : Math.max(Math.abs(mx) * 0.02, 0.01);
+  const step = niceStep(span / 4);
+  let lo = Math.floor((mn - span * 0.05) / step) * step, hi = Math.ceil((mx + span * 0.05) / step) * step;
+  if (mn >= 0 && lo < 0) lo = 0;
+  const cur = c.yr;
+  if (cur && mn >= cur[0] && mx <= cur[1] && cur[1] - cur[0] <= (hi - lo) * 2) return cur;
+  return c.yr = [lo, hi];
+}
+
+/* Min/max decimation on a fixed time grid (bucket edges at multiples of the bucket width), so buckets don't
+   shift as the window scrolls. Bucket width is a power of two in seconds: 0.5-1 bucket per pixel. */
+function sliceData(c, lo, hi, px, r) {
+  const n = hi - lo, cols = c.series.map(s => B[s[0]]);
+  if (n <= px * 2) return [B.t.slice(lo, hi), ...cols.map(a => a.slice(lo, hi))];
+  const bw = 2 ** Math.ceil(Math.log2((r[1] - r[0]) / px));
+  const xs = [], outs = cols.map(() => []);
+  let s = lowerBound(B.t, Math.floor(B.t[lo] / bw) * bw);  // start on a whole bucket, even if left of the view
+  while (s < hi) {
+    const b = Math.floor(B.t[s] / bw), end = (b + 1) * bw;
+    let e = s + 1;
+    while (e < hi && B.t[e] < end) e++;
+    xs.push((b + 0.25) * bw, (b + 0.75) * bw);
+    cols.forEach((a, k) => {
+      let mn = Infinity, mx = -Infinity, imn = s, imx = s;
+      for (let j = s; j < e; j++) { const y = a[j]; if (y < mn) { mn = y; imn = j; } if (y > mx) { mx = y; imx = j; } }
+      if (imn <= imx) outs[k].push(mn, mx); else outs[k].push(mx, mn);
+    });
+    s = e;
+  }
+  return [xs, ...outs];
+}
+
+const LIVE_LAG_S = 0.1;  // trail the wall clock slightly so batched samples are already in when their time scrolls in
+function currentRange() {
+  if (!B.t.length) return null;
+  if (!live && view) return view;
+  // While data is flowing, scroll with the wall clock for smooth motion; otherwise pin to the last sample.
+  const last = B.t[B.t.length - 1], now = Date.now() / 1000 - LIVE_LAG_S;
+  const end = now - last < 3 && now > last - 3 ? now : last;
+  return [winSec ? end - winSec : B.t[0], end];
+}
+
+let lastStatsAt = 0;
+function redraw() {
+  const r = currentRange();
+  if (!r) return;
+  const lo = lowerBound(B.t, r[0]), hi = lowerBound(B.t, r[1] + 1e-6);
+  // Stats are O(window) and only need ~4 Hz; the draw hook reads the cached rangeAvg.
+  const t = performance.now();
+  if (!live || t - lastStatsAt > 250) { rangeStats(lo, hi); lastStatsAt = t; }
+  for (const { u, c, box } of Object.values(plots)) {
+    if (box.classList.contains('hidden')) continue;
+    u.batch(() => {
+      u.setData(sliceData(c, lo, hi, Math.max(200, u.bbox.width / devicePixelRatio), r), false);
+      u.setScale('x', { min: r[0], max: r[1] });
+    });
+    if (u.cursor.idx == null) showCursorValues(u, c);
+  }
+}
+
+/* dashed horizontal line + label at the visible-range average of each shown series */
+let rangeAvg = null;
+function drawAvg(u, c) {
+  if (!rangeAvg) return;
+  const { left, top, width, height } = u.bbox, dpr = devicePixelRatio, multi = c.series.length > 1;
+  const items = c.series.map(([key, name, color, digits], k) => ({ avg: rangeAvg[key], name, color, digits, show: u.series[k + 1].show }))
+    .filter(s => s.show && s.avg != null && !isNaN(s.avg))
+    .map(s => ({ ...s, y: Math.round(u.valToPos(s.avg, 'y', true)) + 0.5 }))
+    .filter(s => s.y >= top && s.y <= top + height);
+  if (!items.length) return;
+  const ctx = u.ctx;
+  ctx.save();
+  ctx.strokeStyle = cssVar('--text-2');
+  ctx.lineWidth = 1.25 * dpr;
+  ctx.setLineDash([6 * dpr, 4 * dpr]);
+  for (const s of items) { ctx.beginPath(); ctx.moveTo(left, s.y); ctx.lineTo(left + width, s.y); ctx.stroke(); }
+  ctx.setLineDash([]);
+  ctx.font = `600 ${11 * dpr}px ui-monospace, Menlo, monospace`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  // Label sits just above its line, right-aligned; a thin surface-colored halo keeps it legible over the trace.
+  const h = 14 * dpr, sw = multi ? 10 * dpr : 0, gap = 12 * dpr, placed = [];
+  ctx.textBaseline = 'bottom';
+  ctx.lineJoin = 'round';
+  for (const s of items.sort((a, b) => a.y - b.y)) {
+    const text = `${multi ? s.name + ' ' : ''}Avg. ${s.avg.toFixed(s.digits)} ${c.unit}`;
+    const w = ctx.measureText(text).width + sw;
+    const by = Math.max(top + h, s.y - 3 * dpr);
+    // Shift left past any label it would vertically overlap.
+    let right = left + width - 4 * dpr;
+    for (const p of placed) if (Math.abs(p.by - by) < h && right > p.bx - gap) right = p.bx - gap;
+    const bx = right - w;
+    placed.push({ bx, by });
+    if (multi) { ctx.fillStyle = cssVar(s.color); ctx.fillRect(bx, by - 9 * dpr, 6 * dpr, 6 * dpr); }
+    ctx.strokeStyle = cssVar('--surface');
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeText(text, bx + sw, by);
+    ctx.fillStyle = cssVar('--text');
+    ctx.fillText(text, bx + sw, by);
+  }
+  ctx.restore();
+}
+
+function rangeStats(lo, hi) {
+  const n = hi - lo;
+  if (n < 1) { $('rstats').innerHTML = ''; rangeAvg = null; return; }
+  let sv = 0, si = 0, sp = 0, sdp = 0, sdm = 0, sc1 = 0, sc2 = 0, mx = -Infinity, mn = Infinity, e = 0, q = 0;
+  for (let j = lo; j < hi; j++) {
+    sv += B.v[j]; si += B.i[j]; sp += B.p[j];
+    sdp += B.dp[j]; sdm += B.dm[j]; sc1 += B.cc1[j]; sc2 += B.cc2[j];
+    if (B.p[j] > mx) mx = B.p[j]; if (B.p[j] < mn) mn = B.p[j];
+    if (j > lo) { const dt = B.t[j] - B.t[j - 1]; if (dt > 0 && dt <= 2) { e += (B.p[j] + B.p[j - 1]) / 2 * dt; q += (B.i[j] + B.i[j - 1]) / 2 * dt; } }
+  }
+  rangeAvg = { v: sv / n, i: si / n, p: sp / n, dp: sdp / n, dm: sdm / n, cc1: sc1 / n, cc2: sc2 / n };
+  const dur = B.t[hi - 1] - B.t[lo];
+  const cells = [['rs.dur', fmtDur(dur)], ['rs.n', n.toLocaleString()], ['rs.avgV', f(sv / n, 4)], ['rs.avgA', f(si / n, 5)],
+                 ['rs.avgW', f(sp / n, 4)], ['rs.minW', f(mn, 4)], ['rs.maxW', f(mx, 4)], ['rs.mWh', f(e / 3.6, 3)], ['rs.mAh', f(q / 3.6, 3)]]
+    .map(([k, v]) => [t(k), v]);
+  $('rstats').innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+}
+
+function zoomTo(a, b) { live = false; view = [Math.min(a, b), Math.max(a, b)]; setLiveUi(); redraw(); }
+function goLive() { live = true; view = null; setLiveUi(); redraw(); }
+function setLiveUi() {
+  $('liveBox').classList.toggle('frozen', !live);
+}
+
+/* window + channel controls */
+function renderWinSeg() {
+  $('winSeg').innerHTML = WINDOWS.map(([s, l]) => `<button data-s="${s}" class="${s === winSec ? 'on' : ''}">${s ? l : t('win.all')}</button>`).join('');
+}
+renderWinSeg();
+$('winSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return;
+  winSec = +b.dataset.s; [...$('winSeg').children].forEach(x => x.classList.toggle('on', x === b)); goLive(); };
+$('chans').innerHTML = CHARTS.map(c => `<label style="--c: var(${c.series[0][2]})"><input type="checkbox" data-id="${c.id}" checked><i></i>${c.title}</label>`).join('');
+$('chans').onchange = applyChanVisibility;
+function applyChanVisibility() {
+  for (const inp of $('chans').querySelectorAll('input')) {
+    const p = plots[inp.dataset.id]; if (p) p.box.classList.toggle('hidden', !inp.checked);
+  }
+  resize(); redraw();
+}
+$('liveBtn').onclick = goLive;
+function resize() {
+  for (const { u, box } of Object.values(plots)) if (!box.classList.contains('hidden')) u.setSize({ width: box.clientWidth, height: u.height });
+}
+new ResizeObserver(() => { resize(); redraw(); }).observe($('charts'));
+/* Language switch */
+$('langSel').value = lang;
+$('langSel').onchange = () => {
+  lang = $('langSel').value;
+  try { localStorage.setItem('powerz.lang', lang); } catch (e) {}
+  applyI18n();
+  renderWinSeg();
+  if (status) renderStatus(status);
+  setRecUi(recording);
+  renderRecords(records);
+  renderPd();
+  renderPdDetail(pdLog.find(e => e.n === pdSel));
+  if (lastMeter) renderMeter(lastMeter);
+  if (lastDisk) renderDisk(...lastDisk);
+  if (lastAlert) $('alertText').textContent = errMsg(lastAlert);
+  updateBattery();
+  lastStatsAt = 0; redraw();
+};
+
+/* Theme: a saved choice wins; otherwise follow the OS. data-theme is always set so CSS has one source of truth. */
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+function savedTheme() { try { return localStorage.getItem('powerz.theme'); } catch (e) { return null; } }
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t || (darkMq.matches ? 'dark' : 'light');
+  for (const p of Object.values(plots)) p.u.destroy();
+  buildCharts(); redraw();
+}
+$('themeBtn').onclick = () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('powerz.theme', next); } catch (e) {}
+  applyTheme(next);
+};
+darkMq.addEventListener('change', () => { if (!savedTheme()) applyTheme(null); });
+
+$('exportView').onclick = () => {
+  const r = currentRange(); if (!r) return;
+  const lo = lowerBound(B.t, r[0]), hi = lowerBound(B.t, r[1] + 1e-6);
+  const rows = ['timestamp,vbus_V,ibus_A,power_W,dp_V,dm_V,cc1_V,cc2_V'];
+  for (let j = lo; j < hi; j++) rows.push([new Date(B.t[j] * 1000).toISOString(), B.v[j], B.i[j], B.p[j].toFixed(6), B.dp[j], B.dm[j], B.cc1[j], B.cc2[j]].join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+  a.download = `powerz_view_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* ================= status / meter ================= */
+let status = null;
+function renderStatus(s) {
+  status = s;
+  const inf = s.info || {};
+  $('dot').classList.toggle('ok', s.connected);
+  $('devText').textContent = s.connected ? `${inf.model || 'KM003C'} · FW ${inf.fw_version || '?'}` : t('st.disconnected');
+  $('devChip').title = s.connected
+    ? `${inf.model || 'KM003C'} · FW ${inf.fw_version || '?'} (${inf.fw_date || '?'}) · HW ${inf.hw_version || '?'} · SN ${inf.serial || '?'}` : '';
+  $('modeChip').style.display = s.connected ? '' : 'none';
+  $('modeChip').textContent = s.streaming ? t('st.stream', { sps: s.rates[s.rate_index] }) : t('st.compat');
+  $('banner').classList.toggle('on', !s.connected && !!s.error);
+  const err = s.error_code ? t('err.' + s.error_code, s.error_params) : s.error;
+  $('banner').textContent = err ? '⚠ ' + err + t('st.retry') : '';
+  $('rateSeg').innerHTML = Object.entries(s.rates).map(([k, v]) =>
+    `<button data-k="${k}" class="${+k === s.rate_index ? 'on' : ''}" ${s.streaming ? '' : 'disabled'}>${v >= 1000 ? '1k' : v}</button>`).join('');
+}
+$('rateSeg').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) post('/api/rate', { rate_index: +b.dataset.k }); };
+
+/* battery runtime estimate: usable energy (mAh x cell V x efficiency) / average power */
+const BATT_DEFAULTS = { bCap: 20000, bVolt: 3.7, bEff: 85, bBasis: 'session' };
+let sessionAvgW = null;
+for (const [id, def] of Object.entries(BATT_DEFAULTS)) {
+  let v = null;
+  try { v = localStorage.getItem('powerz.' + id); } catch (e) {}
+  $(id).value = v ?? def;
+  $(id).addEventListener('input', () => { try { localStorage.setItem('powerz.' + id, $(id).value); } catch (e) {} updateBattery(); });
+}
+function fmtRuntime(h) {
+  if (!isFinite(h) || h <= 0) return '—';
+  const m = Math.round(h * 60);
+  if (m < 60) return t('rt.m', { m });
+  const d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60), mm = m % 60;
+  return d ? t('rt.dhm', { d, h: hh, m: mm }) : t('rt.hm', { h: hh, m: mm });
+}
+function updateBattery() {
+  const cap = +$('bCap').value, volt = +$('bVolt').value, eff = +$('bEff').value / 100;
+  const wh = cap > 0 && volt > 0 && eff > 0 ? cap / 1000 * volt * eff : NaN;
+  const w = $('bBasis').value === 'range' ? rangeAvg && rangeAvg.p : sessionAvgW;
+  $('bWh').textContent = f(wh, 2);
+  $('bW').textContent = f(w, 3);
+  $('bTime').textContent = w > 0 ? fmtRuntime(wh / w) : '—';
+}
+
+let lastMeter = null;
+function renderMeter(m) {
+  lastMeter = m;
+  $('mP').textContent = f(m.p, 3); $('mV').textContent = f(m.v, 3); $('mI').textContent = f(Math.abs(m.i), 4);
+  $('mPa').textContent = f(m.p_avg, 3); $('mVa').textContent = f(m.v_avg, 3); $('mIa').textContent = f(Math.abs(m.i_avg), 4);
+  // Measured on this unit: source on the female port -> DUT on the male plug reads negative IBUS.
+  $('dirTag').textContent = Math.abs(m.i) < 0.001 ? '' : t(m.i < 0 ? 'dir.normal' : 'dir.reverse');
+  $('mDp').textContent = f(m.dp, 3); $('mDm').textContent = f(m.dm, 3); $('mCc1').textContent = f(m.cc1, 3); $('mCc2').textContent = f(m.cc2, 3);
+  $('mTemp').textContent = f(m.temp, 1);
+  const s = m.session;
+  $('aT').textContent = fmtDur(s.duration_s); $('aAh').textContent = f(s.charge_Ah * 1000, 3); $('aWh').textContent = f(s.energy_Wh * 1000, 3);
+  $('aW').textContent = f(s.avg_W, 4); $('aMax').textContent = f(s.max_W, 3); $('aDrop').textContent = m.dropped;
+  sessionAvgW = s.samples ? s.avg_W : null;
+  updateBattery();
+  if (m.recording) $('recTime').textContent = fmtDur(m.recording.duration_s) + ` · ${fmtBytes(m.recording.bytes)}`;
+  renderDisk(m.disk_free, m.min_free);
+}
+$('resetBtn').onclick = () => post('/api/session/reset');
+
+/* ================= recording ================= */
+let recording = null;
+function setRecUi(name) {
+  recording = name;
+  $('recBtn').textContent = t(name ? 'rec.stop' : 'rec.start');
+  $('recBtn').classList.toggle('rec', !!name);
+  $('recLabel').disabled = !!name;
+  $('recTimer').classList.toggle('on', !!name);
+  if (name) $('recTime').textContent = '00:00';
+}
+$('recBtn').onclick = async () => {
+  if (recording) { await post('/api/record/stop'); setRecUi(null); loadState(); }
+  else { const r = await post('/api/record/start', { label: $('recLabel').value }); if (r.ok) setRecUi(r.name); else alert(errMsg(r)); }
+};
+const fmtBytes = n => n == null ? '—' : n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB`
+  : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`;
+const ICONS = {
+  edit: '<svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L6 12H4v-2z"/></svg>',
+  save: '<svg viewBox="0 0 16 16"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10"/></svg>',
+  del:  '<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+};
+let records = [];
+function renderRecords(list) {
+  records = list;
+  $('recCount').textContent = list.length;
+  $('recTotal').textContent = list.length ? t('rec.total', { n: list.length, size: fmtBytes(list.reduce((a, r) => a + (r.size || 0), 0)) }) : '';
+  $('recBody').innerHTML = list.length ? list.map((r, k) => `<tr data-k="${k}">
+      <td class="fname-cell"><span class="fname" title="${esc(t('rec.clickRename'))}">${esc(r.name.replace(/\.csv$/, ''))}</span><span class="ext">.csv</span>
+        ${r.pd_file ? `<button class="tag pdlink" data-act="save-pd" title="${esc(t('rec.savePd'))}">PD</button>` : ''}</td>
+      <td class="num">${new Date(r.started * 1000).toLocaleString(LOCALES[lang])}</td><td class="r num">${fmtDur(r.duration_s)}</td><td class="r num">${r.rate_sps}</td>
+      <td class="r num">${f(r.avg_V, 3)}</td><td class="r num">${f(r.avg_A, 4)}</td><td class="r num"><b>${f(r.avg_W, 4)}</b></td>
+      <td class="r num">${f(r.min_W, 3)}</td><td class="r num">${f(r.max_W, 3)}</td><td class="r num">${f(r.energy_Wh * 1000, 3)}</td>
+      <td class="r num">${f(r.charge_Ah * 1000, 3)}</td><td class="r num">${r.pd_messages}</td><td class="r num">${fmtBytes(r.size)}</td>
+      <td class="acts"><button class="icon" data-act="rename" title="${esc(t('rec.rename'))}">${ICONS.edit}</button><button class="icon" data-act="save" title="${esc(t('rec.save'))}">${ICONS.save}</button><button class="icon danger" data-act="delete" title="${esc(t('rec.delete'))}">${ICONS.del}</button></td></tr>`).join('')
+    : `<tr><td colspan="14" class="empty">${esc(t('rec.empty'))}</td></tr>`;
+}
+
+/* Save As: native save dialog where supported (Chrome/Edge), otherwise a normal download. */
+async function saveAs(name) {
+  const url = '/logs/' + encodeURIComponent(name);
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }] });
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(t('err.download', { status: res.status }));
+      await res.body.pipeTo(await h.createWritable());
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      if (e.name !== 'SecurityError' && e.name !== 'NotAllowedError') { alert(e.message); return; }
+    }
+  }
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+}
+
+function startRename(tr) {
+  const r = records[+tr.dataset.k], cell = tr.querySelector('.fname-cell');
+  if (cell.querySelector('input')) return;
+  const stem = r.name.replace(/\.csv$/, '');
+  const saved = cell.innerHTML;
+  cell.innerHTML = `<input type="text" class="rename num" value="${esc(stem)}"><span class="ext">.csv</span>`;
+  const inp = cell.querySelector('input');
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = async commit => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (!commit || !v || v === stem) { cell.innerHTML = saved; return; }
+    const res = await post('/api/records/rename', { name: r.name, new_name: v });
+    if (!res.ok) { alert(errMsg(res)); cell.innerHTML = saved; return; }
+    loadState();
+  };
+  inp.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  inp.onblur = () => finish(true);
+}
+
+$('recBody').onclick = async e => {
+  const tr = e.target.closest('tr[data-k]'); if (!tr) return;
+  const r = records[+tr.dataset.k];
+  const act = e.target.closest('[data-act]')?.dataset.act || (e.target.closest('.fname') ? 'rename' : null);
+  if (act === 'rename') startRename(tr);
+  else if (act === 'save') saveAs(r.name);
+  else if (act === 'save-pd') saveAs(r.pd_file);
+  else if (act === 'delete') {
+    if (!confirm(t('rec.confirmDelete', { name: r.name, pd: r.pd_file ? t('rec.confirmDeletePd') : '' }))) return;
+    const res = await post('/api/records/delete', { name: r.name });
+    if (!res.ok) alert(errMsg(res));
+    loadState();
+  }
+};
+
+/* disk space guard display */
+let lastDisk = null;
+function renderDisk(free, minFree) {
+  if (free == null) return;
+  lastDisk = [free, minFree];
+  const el = $('diskChip');
+  el.style.display = '';
+  el.textContent = t('disk.free', { size: fmtBytes(free) });
+  el.className = 'chip num' + (free < minFree ? ' bad' : free < minFree * 3 ? ' warn' : '');
+  el.title = t('disk.title', { size: fmtBytes(minFree) });
+}
+let lastAlert = null;
+function showAlert(m) {
+  lastAlert = m;
+  $('alertText').textContent = errMsg(m);
+  $('alertBanner').classList.add('on');
+}
+$('alertClose').onclick = () => $('alertBanner').classList.remove('on');
+
+/* ================= PD ================= */
+const pdLog = [];
+let pdSel = null;
+function pdRow(e) {
+  if (e.kind === 'conn') return `<tr class="conn" data-n="${e.n}"><td class="r num">${e.n}</td><td class="r num">${f(e.dev_s, 3)}</td><td></td><td></td>
+      <td><span class="tag ev">${e.name === 'Attach' ? t('pd.attach') : e.name === 'Detach' ? t('pd.detach') : esc(e.name)}</span></td><td></td><td></td><td class="r num">${f(e.vbus, 2)}</td></tr>`;
+  const ctrl = e.n_obj === 0 && !e.name.includes('_Capabilities');
+  const role = e.roles.startsWith('Source') ? 'src' : e.roles.startsWith('Sink') ? 'snk' : '';
+  return `<tr data-n="${e.n}" class="${pdSel === e.n ? 'sel' : ''}"><td class="r num">${e.n}</td><td class="r num">${f(e.dev_s, 3)}</td><td>${esc(e.sop)}</td>
+    <td><span class="tag ${role}">${esc(e.roles)}</span></td><td class="msg-name ${ctrl ? 'ctrl' : ''}">${esc(e.name)}</td>
+    <td class="r num">${e.msg_id}</td><td>${esc(e.summary)}</td><td class="r num">${f(e.vbus, 2)}</td></tr>`;
+}
+function renderPd() {
+  const hide = $('hideCrc').checked;
+  const rows = pdLog.filter(e => !(hide && e.name === 'GoodCRC'));
+  $('pdCount').textContent = pdLog.filter(e => e.kind === 'msg' && e.name !== 'GoodCRC').length;
+  $('pdBody').innerHTML = rows.length ? rows.map(pdRow).join('') : `<tr><td colspan="8" class="empty">${esc(t('pd.empty'))}<br><span class="hint">${esc(t('pd.emptyHint'))}</span></td></tr>`;
+  if ($('pdFollow').checked) $('pdWrap').scrollTop = $('pdWrap').scrollHeight;
+}
+function renderPdDetail(e) {
+  if (!e) { $('pdDetail').innerHTML = `<div class="hint">${esc(t('pd.pick'))}</div>`; return; }
+  if (e.kind === 'conn') { $('pdDetail').innerHTML = `<h2>${esc(e.name)}</h2><div class="kv"><span>${t('pd.d.time')}</span><span class="num">${f(e.dev_s, 3)} s</span><span>VBUS</span><span class="num">${f(e.vbus, 3)} V</span></div>`; return; }
+  $('pdDetail').innerHTML = `<h2>${esc(e.name)}</h2><div class="hint">${esc(e.summary || '')}</div>
+    <div class="kv num"><span>#</span><span>${e.n}</span><span>${t('pd.d.time')}</span><span>${f(e.dev_s, 3)} s</span><span>SOP</span><span>${esc(e.sop)}</span>
+      <span>${t('pd.d.role')}</span><span>${esc(e.roles)}</span><span>${t('pd.d.rev')}</span><span>${esc(e.rev)}</span><span>Message ID</span><span>${e.msg_id}</span>
+      <span>Header</span><span>${esc(e.header)}</span><span>Objects</span><span>${e.n_obj}</span>
+      <span>VBUS / IBUS</span><span>${f(e.vbus, 3)} V / ${f(e.ibus, 3)} A</span></div>
+    ${e.details.map(d => `<div class="pdo"><div class="h"><span>${esc(d.label)}</span><span class="num">${esc(d.raw)}</span></div>
+      ${d.value ? `<div class="b num">${esc(d.value)}</div>` : ''}${d.flags.length ? `<div class="f">${d.flags.map(x => `<span class="tag">${esc(x)}</span>`).join('')}</div>` : ''}</div>`).join('')}
+    <div class="lbl" style="margin:12px 0 4px;display:block">Raw</div><div class="raw num">${esc(e.raw)}</div>`;
+}
+$('pdBody').onclick = ev => { const tr = ev.target.closest('tr[data-n]'); if (!tr) return;
+  pdSel = +tr.dataset.n; $('pdBody').querySelectorAll('tr').forEach(x => x.classList.toggle('sel', x === tr));
+  renderPdDetail(pdLog.find(e => e.n === pdSel)); };
+$('hideCrc').onchange = renderPd;
+$('pdClear').onclick = async () => { await post('/api/pd/clear'); pdLog.length = 0; pdSel = null; renderPd(); renderPdDetail(null); };
+
+/* ================= tabs ================= */
+document.querySelector('.tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'live') { resize(); redraw(); } };
+
+/* ================= boot ================= */
+async function loadState() {
+  const s = await (await fetch('/api/state')).json();
+  renderStatus(s); setRecUi(s.recording); renderRecords(s.records); renderDisk(s.disk_free, s.min_free);
+  pdLog.length = 0; pdLog.push(...s.pd); renderPd();
+}
+buildCharts();
+setLiveUi();
+(async () => {
+  await loadState();
+  renderPdDetail(null);
+  append(await (await fetch('/api/history')).json());
+  redraw();
+  const es = new EventSource('/events');
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'samples') append(m);
+    else if (m.type === 'meter') renderMeter(m);
+    else if (m.type === 'status') renderStatus(m);
+    else if (m.type === 'pd') { pdLog.push(...m.events); renderPd(); }
+    else if (m.type === 'alert') { showAlert(m); if (m.record_stopped) { setRecUi(null); loadState(); } }
+  };
+  es.onerror = () => { $('dot').classList.remove('ok'); $('devText').textContent = t('st.serverLost'); };
+})();
+/* Animation loop: up to display refresh rate, throttled adaptively so drawing stays under ~40% of frame time. */
+let lastFrameAt = 0, frameGap = 0;
+const perf = { frames: 0, cost: 0 };
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (!live || document.hidden || !document.querySelector('#tab-live.on') || ts - lastFrameAt < frameGap) return;
+  lastFrameAt = ts;
+  const t0 = performance.now();
+  redraw();
+  const cost = performance.now() - t0;
+  frameGap = Math.min(250, cost * 2.5);
+  perf.frames++; perf.cost += cost;
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
