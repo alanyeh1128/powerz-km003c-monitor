@@ -60,7 +60,7 @@
   button, input, select { font: inherit; color: inherit; }
 
   /* ---------- top bar ---------- */
-  .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
             padding: 10px 20px; background: color-mix(in srgb, var(--surface) 88%, transparent);
             backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; letter-spacing: .2px; }
@@ -88,6 +88,8 @@
   input[type=text]:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   .recbox { display: flex; align-items: center; gap: 8px; }
   .recbox input { width: 215px; }
+  /* While recording the label is read-only; give its width to the timer so the bar stays on one line. */
+  .recbox input:disabled { width: 100px; }
   .rec-timer { color: var(--rec); font-weight: 600; display: none; align-items: center; gap: 6px; }
   .rec-timer.on { display: inline-flex; }
   .rec-timer .dot { background: var(--rec); animation: pulse 1s infinite; }
@@ -767,6 +769,12 @@ function renderMeter(m) {
   $('aW').textContent = f(s.avg_W, 4); $('aMax').textContent = f(s.max_W, 3); $('aDrop').textContent = m.dropped;
   sessionAvgW = s.samples ? s.avg_W : null;
   updateBattery();
+  // Keep every open tab in sync when another tab starts or stops a recording.
+  const recName = m.recording ? m.recording.name : null;
+  if (recName !== recording) {
+    if (recName && !$('recLabel').value) $('recLabel').value = recName.replace(/^\d{8}_\d{6}_?/, '').replace(/\.csv$/, '');
+    setRecUi(recName); if (!recName) loadState();
+  }
   if (m.recording) $('recTime').textContent = fmtDur(m.recording.duration_s) + ` · ${fmtBytes(m.recording.bytes)}`;
   renderDisk(m.disk_free, m.min_free);
 }

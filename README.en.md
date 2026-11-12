@@ -4,9 +4,7 @@
 
 A web dashboard for the [ChargerLAB POWER-Z KM003C](https://www.chargerlab.com/) USB-C power meter on macOS. It talks to the meter directly over USB, so the official Windows software isn't needed. You get live voltage, current and power charts, CSV recording, and USB PD packet capture with decoding.
 
-![POWER-Z Monitor](docs/live.png)
-
-> Most screenshots show the Traditional Chinese UI. Switch the language from the menu in the top-right corner.
+![POWER-Z Monitor](docs/en/live.png)
 
 ## Features
 
@@ -41,23 +39,23 @@ The screenshot at the top shows the Live tab:
 
 ### Zooming and range statistics
 
-![Drag to zoom](docs/zoom.png)
+![Drag to zoom](docs/en/zoom.png)
 
 **Drag** on any chart and all four charts zoom to the same time range and pause ("Paused"). The stats row then shows that range's duration, sample count, avg V / A / W, min / max power, energy and charge, which makes it easy to measure consumption during a specific action such as booting or playing a video. Press "Back to live" or **double-click** a chart to resume live scrolling.
 
 ### Recording
 
-![Recording](docs/recording.png)
+![Recording](docs/en/recording.png)
 
 Enter a test name in the top-right corner and press "● Record". While recording, the elapsed time and current file size are shown; press "■ Stop" to finish and save.
 
-![Recordings](docs/records.png)
+![Recordings](docs/en/records.png)
 
 The Recordings tab lists a summary of every recording. **Click a file name** to rename it. The three icons on the right are rename, save as (Chrome / Edge open a save dialog so you can pick a location), and delete.
 
 ### Dark / light mode and languages
 
-![Light mode, English UI](docs/light-en.png)
+![Light mode](docs/en/light.png)
 
 Switch the language (Traditional Chinese, Simplified Chinese, English, Japanese, Korean) and dark / light mode in the top-right corner. Your choices are remembered by the browser.
 

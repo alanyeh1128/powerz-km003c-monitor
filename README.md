@@ -4,7 +4,7 @@
 
 在 macOS 上讀取 [ChargerLAB POWER-Z KM003C](https://www.chargerlab.com/) USB-C 功率計的網頁儀表板。直接透過 USB 跟裝置溝通，不需要官方的 Windows 軟體。可以即時看電壓、電流、功率曲線，錄製 CSV，以及擷取並解碼 USB PD 封包。
 
-![POWER-Z Monitor 畫面](docs/live.png)
+![POWER-Z Monitor 畫面](docs/zh-Hant/live.png)
 
 ## 功能
 
@@ -39,23 +39,23 @@
 
 ### 放大區間與區間統計
 
-![拖曳放大區間](docs/zoom.png)
+![拖曳放大區間](docs/zh-Hant/zoom.png)
 
 在任一張圖上**拖曳**，四張圖會一起放大到同一段時間，進入「已凍結」狀態。上方統計列會顯示這段區間的長度、樣本數、平均 V / A / W、最小 / 最大功率、能量和電量，方便量測某個動作（例如開機、播放影片）期間的耗電。按「回到即時」或在圖上**雙擊**即可恢復即時捲動。
 
 ### 錄製
 
-![錄製中](docs/recording.png)
+![錄製中](docs/zh-Hant/recording.png)
 
 在右上角輸入測試項目名稱後按「● 錄製」。錄製中會顯示經過時間和目前檔案大小，再按一次「■ 停止」就會結束並保存。
 
-![錄製紀錄](docs/records.png)
+![錄製紀錄](docs/zh-Hant/records.png)
 
 「錄製紀錄」頁列出每次錄製的統計摘要。**點檔名**可以直接改名，右側三個圖示分別是改名、另存新檔（Chrome / Edge 會跳出存檔視窗讓你選位置）和刪除。
 
 ### 深色 / 淺色模式與多語系
 
-![淺色模式與英文介面](docs/light-en.png)
+![淺色模式](docs/zh-Hant/light.png)
 
 右上角可以切換語言（繁體中文、简体中文、English、日本語、한국어）和深色 / 淺色模式。選擇會記在瀏覽器裡，下次開啟會沿用。
 
