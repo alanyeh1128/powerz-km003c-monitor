@@ -340,7 +340,7 @@
           <div class="row"><span data-i18n="acc.dropped">遺失樣本</span><span class="num" id="aDrop">0</span></div>
         </div>
         <div class="card acc off-only" id="offInfo" style="display:none">
-          <h3 style="margin-bottom:6px" data-i18n="off.info">檔案資訊</h3>
+          <h3 style="margin-bottom:6px" data-i18n="off.acc">累計（整個檔案）</h3>
           <div id="offRows"></div>
         </div>
         <div class="card acc batt">
@@ -1095,11 +1095,11 @@ function renderOffInfo() {
   }
   const n = B.t.length, st = statsOf(0, n), a = st.avg, loc = LOCALES[lang];
   const date = x => new Date(x * 1000).toLocaleString(loc);
-  const sps = n > 1 && st.dur > 0 ? (n - 1) / st.dur : null;
   const dir = Math.abs(offFile.meanI) < 0.001 ? '—' : t(offFile.meanI < 0 ? 'dir.normal' : 'dir.reverse');
-  const rows = [['rec.h.start', date(B.t[0])], ['off.end', date(B.t[n - 1])], ['rec.h.dur', fmtDur(st.dur)], ['rs.n', n.toLocaleString()],
-                ['rate', sps ? `${sps >= 100 ? Math.round(sps) : sps.toFixed(1)} SPS` : '—'], ['rs.avgV', f(a.v, 4)], ['rs.avgA', f(a.i, 5)],
-                ['rs.avgW', f(a.p, 4)], ['rs.maxW', f(st.maxW, 4)], ['rs.mWh', f(st.Wh * 1000, 3)], ['rs.mAh', f(st.Ah * 1000, 3)], ['off.dir', dir]];
+  // Same rows and formats as the live totals card, plus start / end time and current direction.
+  const rows = [['rec.h.start', date(B.t[0])], ['off.end', date(B.t[n - 1])], ['acc.time', fmtDur(st.dur)],
+                ['acc.charge', f(st.Ah * 1000, 3) + ' mAh'], ['acc.energy', f(st.Wh * 1000, 3) + ' mWh'],
+                ['acc.avgW', f(a.p, 4) + ' W'], ['acc.maxW', f(st.maxW, 3) + ' W'], ['off.dir', dir]];
   $('offRows').innerHTML = rows.map(([k, v]) => `<div class="row"><span>${esc(t(k))}</span><span class="num">${esc(v)}</span></div>`).join('');
   $('offMsg').className = 'msg';
   $('offMsg').innerHTML = `<b>${esc(offFile.name)}</b>`;

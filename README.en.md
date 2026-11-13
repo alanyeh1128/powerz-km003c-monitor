@@ -62,7 +62,7 @@ Click **Offline** at the right end of the tab bar. The app stops reading the POW
 
 - Pick a recording from the drop-down, or press "Open CSV file…" to choose a file on your computer. Each row in the Recordings tab also has a chart icon that opens it in offline mode.
 - The charts start with the whole file. Drag to zoom, double-click to show the whole file again; the stats row and average lines work as in live mode.
-- The left column becomes "File info": start / end time, duration, samples, sample rate, avg V / A / W, max W, energy, charge and current direction. The battery estimate uses the whole-file average power.
+- The POWER, VBUS and IBUS cards on the left show averages (the whole file, or the visible range once zoomed). Below them, "Totals (whole file)" lists start / end time, time, charge, energy, average and peak power, and current direction. The battery estimate uses the whole-file average power.
 - Both recording files and files from the chart's CSV export can be opened. Files are parsed in the browser as they stream in; an hour at 1000 SPS (about 320 MB, 3.6 million rows) opens in about 2 seconds.
 - You can't switch to offline while recording. Click **Live** to reconnect and resume live monitoring.
 
