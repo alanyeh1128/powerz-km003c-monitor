@@ -619,9 +619,9 @@ function currentRange() {
   if (!B.t.length) return null;
   if (!live && view) return view;
   if (offline) return [B.t[0], B.t[B.t.length - 1]];  // a loaded file: show all of it
-  // While data is flowing, scroll with the wall clock for smooth motion; otherwise pin to the last sample.
+  // While data is flowing, scroll with the wall clock for smooth motion; otherwise (or once stopped) pin to the last sample.
   const last = B.t[B.t.length - 1], now = Date.now() / 1000 - LIVE_LAG_S;
-  const end = now - last < 3 && now > last - 3 ? now : last;
+  const end = !paused && now - last < 3 && now > last - 3 ? now : last;
   return [winSec ? end - winSec : B.t[0], end];
 }
 
@@ -912,9 +912,11 @@ function setRunUi(p) {
   if (!modeTarget) { $('liveLbl').dataset.i18n = p ? 'st.paused' : 'live.on'; $('liveLbl').textContent = t($('liveLbl').dataset.i18n); }
   applyRecLock();
 }
+// The server broadcasts the new state to every tab (this one included) before it replies, so the UI follows that
+// status event rather than this reply, which could be stale if another tab toggled in between.
 $('runBtn').onclick = async () => {
   const r = await post('/api/sampling', { run: paused });
-  if (!r.ok) alert(errMsg(r)); else setRunUi(!paused);
+  if (!r.ok) alert(errMsg(r));
 };
 
 $('recBtn').onclick = async () => {

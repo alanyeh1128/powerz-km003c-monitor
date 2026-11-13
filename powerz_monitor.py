@@ -364,6 +364,10 @@ class Monitor:
         with self.lock:
             if paused and self.rec_writer:
                 return fail("recording_pause", "錄製中無法停止取樣，請先停止錄製。")
+            resume = self.paused and not paused
+        if resume:
+            self.reset_session()  # Start begins a fresh run: clear before the worker samples again
+        with self.lock:
             self.paused = paused
         # The worker stops / restarts the stream and broadcasts again once that's done.
         self._broadcast({"type": "status", **self.status()})
