@@ -238,6 +238,16 @@
   button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   button.icon:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
   button.icon.export { width: 26px; height: 24px; margin-left: -4px; border-color: var(--border); border-radius: 999px; }
+  /* Reset clears everything, so it gets its own amber look, distinct from the red Record button. */
+  .reset-btn { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+               color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+               background: color-mix(in srgb, var(--warn) 8%, var(--surface)); transition: background .15s, color .15s; }
+  .reset-btn svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+                   transition: transform .4s ease; }
+  .reset-btn:hover { background: var(--warn); border-color: var(--warn); color: var(--surface); }
+  .reset-btn:hover svg { transform: rotate(-270deg); }
+  .reset-btn:active { transform: scale(.96); }
+
   /* ---------- offline review ---------- */
   .modeseg { align-self: center; margin-left: auto; }
   body:not(.offline) .off-only, body.offline .live-only { display: none; }
@@ -329,7 +339,7 @@
         </div>
         <div class="card acc live-only">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <h3 data-i18n="acc.title">累計（自啟動 / 歸零）</h3><button class="btn ghost" id="resetBtn" data-i18n="acc.reset">歸零</button>
+            <h3 data-i18n="acc.title">累計（自啟動 / 歸零）</h3><button class="btn reset-btn" id="resetBtn"><svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"/></svg><span data-i18n="acc.reset">歸零</span></button>
           </div>
           <div class="row"><span data-i18n="acc.time">時間</span><span class="num" id="aT">—</span></div>
           <div class="row"><span data-i18n="acc.charge">電量</span><span class="num"><span id="aAh">—</span> mAh</span></div>
@@ -815,7 +825,7 @@ function renderMeter(m) {
   if (m.recording) $('recTime').textContent = fmtDur(m.recording.duration_s) + ` · ${fmtBytes(m.recording.bytes)}`;
   renderDisk(m.disk_free, m.min_free);
 }
-$('resetBtn').onclick = () => post('/api/session/reset');
+$('resetBtn').onclick = () => { if (confirm(t('acc.confirmReset'))) post('/api/session/reset'); };
 
 /* ================= recording ================= */
 let recording = null;
@@ -1135,6 +1145,10 @@ setLiveUi();
     else if (m.type === 'meter') renderMeter(m);
     else if (m.type === 'status') renderStatus(m);
     else if (m.type === 'pd') { pdLog.push(...m.events); renderPd(); }
+    else if (m.type === 'reset') {  // someone pressed Reset: drop the curves and PD log here too
+      if (!offline) { resetBuffer(); goLive(); }
+      pdLog.length = 0; pdSel = null; renderPd(); renderPdDetail(null);
+    }
     else if (m.type === 'alert') { showAlert(m); if (m.record_stopped) { setRecUi(null); loadState(); } }
   };
   es.onerror = () => { $('dot').classList.remove('ok'); $('devText').textContent = t('st.serverLost'); };

@@ -457,9 +457,14 @@ class Monitor:
             return {"ok": True}
 
     def reset_session(self):
+        """Start over: totals, chart history and the PD log. A recording in progress keeps going untouched."""
         with self.lock:
             self.session.reset()
             self.dropped = 0
+            self.history.clear()
+            self.pd_log = []
+            self.pd_t0 = None
+        self._broadcast({"type": "reset"})
         return {"ok": True}
 
     def clear_pd(self):
