@@ -21,6 +21,7 @@ A web dashboard for the [ChargerLAB POWER-Z KM003C](https://www.chargerlab.com/)
   - Hide GoodCRC, export as CSV
 - **Recording**: each recording is saved as a CSV in `logs/`, with a summary row added to `logs/summary.csv`; PD messages captured during a recording go to `*_pd.csv`
   - Rename, save as, or delete recordings from the Recordings tab
+- **Offline review**: switch to Offline to stop reading the POWER-Z and open a saved CSV instead (pick a recording, or open any CSV on your computer), then review the whole run with the same charts, drag-to-zoom and range statistics
 - **Disk guard**: free space is shown in the top-right corner. Below the limit (1 GB by default) a new recording won't start, and a running one is stopped and saved
 - **Battery runtime estimate**: enter capacity, cell voltage and efficiency to estimate how long a battery would last at the average power
 - **UI**: dark / light mode; languages: Traditional Chinese (default), Simplified Chinese, English, Japanese, Korean
@@ -52,6 +53,18 @@ Enter a test name in the top-right corner and press "● Record". While recordin
 ![Recordings](docs/en/records.png)
 
 The Recordings tab lists a summary of every recording. **Click a file name** to rename it. The three icons on the right are rename, save as (Chrome / Edge open a save dialog so you can pick a location), and delete.
+
+### Offline review
+
+![Offline review](docs/en/offline.png)
+
+Click **Offline** at the right end of the tab bar. The app stops reading the POWER-Z (and releases USB, so other tools can use it) and the screen switches to reviewing a saved CSV:
+
+- Pick a recording from the drop-down, or press "Open CSV file…" to choose a file on your computer. Each row in the Recordings tab also has a chart icon that opens it in offline mode.
+- The charts start with the whole file. Drag to zoom, double-click to show the whole file again; the stats row and average lines work as in live mode.
+- The left column becomes "File info": start / end time, duration, samples, sample rate, avg V / A / W, max W, energy, charge and current direction. The battery estimate uses the whole-file average power.
+- Both recording files and files from the chart's CSV export can be opened. Files are parsed in the browser as they stream in; an hour at 1000 SPS (about 320 MB, 3.6 million rows) opens in about 2 seconds.
+- You can't switch to offline while recording. Click **Live** to reconnect and resume live monitoring.
 
 ### Dark / light mode and languages
 

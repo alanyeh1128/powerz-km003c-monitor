@@ -98,6 +98,7 @@ class Monitor:
         self.pd_log = []
         self.pd_t0 = None
         self._seq_anchor = None
+        self.offline = False  # offline review: the meter is released and not polled
         # Recording state
         self.rec_file = self.rec_writer = self.rec_name = self.rec_stats = None
         self.records = self._load_records()
@@ -105,6 +106,11 @@ class Monitor:
     # ---------------- device loop ----------------
     def run(self):
         while True:
+            if self.offline:
+                if self.connected:
+                    self._release()
+                time.sleep(0.2)
+                continue
             if not self.connected:
                 if not self._connect():
                     time.sleep(1)
@@ -146,6 +152,13 @@ class Monitor:
         self.meter.close()
         self.connected = self.streaming = False
         self._set_error(code, msg, **params)
+        self._broadcast({"type": "status", **self.status()})
+
+    def _release(self):
+        """Stop streaming and hand the USB interface back (entering offline review)."""
+        self.meter.close()
+        self.connected = self.streaming = False
+        self._set_error(None, "")
         self._broadcast({"type": "status", **self.status()})
 
     def _start_stream(self):
@@ -311,7 +324,7 @@ class Monitor:
         return {"connected": self.connected, "error": self.error, "error_code": self.error_code,
                 "error_params": self.error_params, "info": self.meter.info,
                 "streaming": self.streaming, "rate_index": self.rate_index,
-                "rates": GRAPH_RATES}
+                "rates": GRAPH_RATES, "offline": self.offline}
 
     def set_rate(self, idx):
         if idx not in GRAPH_RATES:
@@ -319,8 +332,19 @@ class Monitor:
         self.cmds.put(("rate", idx))
         return {"ok": True}
 
+    def set_offline(self, offline):
+        with self.lock:
+            if offline and self.rec_writer:
+                return fail("recording_offline", "錄製中無法切換到離線模式，請先停止錄製。")
+            self.offline = offline
+        # The worker releases (or reconnects) the meter and broadcasts again once that's done.
+        self._broadcast({"type": "status", **self.status()})
+        return {"ok": True}
+
     def start_record(self, label):
         with self.lock:
+            if self.offline:
+                return fail("offline_no_record", "離線模式無法錄製")
             if self.rec_writer:
                 return fail("recording", "已在錄製中")
             os.makedirs(LOG_DIR, exist_ok=True)
@@ -537,6 +561,7 @@ def make_handler(mon):
                 "/api/record/stop": mon.stop_record,
                 "/api/session/reset": mon.reset_session,
                 "/api/pd/clear": mon.clear_pd,
+                "/api/mode": lambda: mon.set_offline(bool(body.get("offline"))),
                 "/api/rate": lambda: mon.set_rate(int(body.get("rate_index", -1))),
                 "/api/records/rename": lambda: mon.rename_record(str(body.get("name", "")), str(body.get("new_name", ""))),
                 "/api/records/delete": lambda: mon.delete_record(str(body.get("name", ""))),

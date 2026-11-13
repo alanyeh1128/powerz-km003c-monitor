@@ -97,9 +97,9 @@
 
   /* ---------- tabs ---------- */
   .tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .tabs button { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--text-2);
+  .tabs > button { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--text-2);
                  border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
-  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tabs > button.on { color: var(--text); border-bottom-color: var(--accent); }
   .badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 9px;
            background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; color: var(--text-2); }
   main { padding: 16px 20px 32px; max-width: 1600px; margin: 0 auto; }
@@ -238,6 +238,16 @@
   button.icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   button.icon:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
   button.icon.export { width: 26px; height: 24px; margin-left: -4px; border-color: var(--border); border-radius: 999px; }
+  /* ---------- offline review ---------- */
+  .modeseg { align-self: center; margin-left: auto; }
+  body:not(.offline) .off-only, body.offline .live-only { display: none; }
+  .offbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 16px; }
+  .offbar select { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 5px 8px; max-width: 380px; }
+  .offbar .msg { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .offbar .msg b { color: var(--text); }
+  .offbar .msg.err { color: var(--bad); }
+  body.offline .st-live { color: var(--text-2); }
+  body.offline .st-live .dot { display: none; }
   button.icon.danger:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 </style>
 </head>
@@ -250,8 +260,8 @@
   <span class="chip" id="devChip"><span class="dot" id="dot"></span><span id="devText" data-i18n="connecting">連線中…</span></span>
   <span class="chip num" id="modeChip" style="display:none"></span>
   <div class="spacer"></div>
-  <div><span class="lbl" data-i18n="rate">取樣率</span><span class="seg" id="rateSeg"></span></div>
-  <div class="recbox">
+  <div class="live-only"><span class="lbl" data-i18n="rate">取樣率</span><span class="seg" id="rateSeg"></span></div>
+  <div class="recbox live-only">
     <span class="chip num" id="diskChip" style="display:none"></span>
     <span class="rec-timer num" id="recTimer"><span class="dot"></span><span id="recTime">00:00</span></span>
     <input type="text" id="recLabel" data-i18n-ph="rec.placeholder" placeholder="測試項目，如 device_idle">
@@ -272,9 +282,12 @@
   </div>
 </header>
 <nav class="tabs">
-  <button class="on" data-tab="live"><span data-i18n="tab.live">即時監測</span></button>
+  <button class="on" data-tab="live"><span id="tabLiveLbl" data-i18n="tab.live">即時監測</span></button>
   <button data-tab="pd"><span data-i18n="tab.pd">PD 分析</span><span class="badge num" id="pdCount">0</span></button>
   <button data-tab="rec"><span data-i18n="tab.rec">錄製紀錄</span><span class="badge num" id="recCount">0</span></button>
+  <span class="seg modeseg" id="modeSeg" data-i18n-title="mode.title">
+    <button data-m="live" class="on" data-i18n="mode.live">即時</button><button data-m="offline" data-i18n="mode.offline">離線</button>
+  </span>
 </nav>
 
 <main>
@@ -283,14 +296,24 @@
 
   <!-- ================= LIVE ================= -->
   <section class="tab on" id="tab-live">
+    <div class="card offbar off-only">
+      <select id="offSel"></select>
+      <button class="btn" id="offOpen" data-i18n="off.open">開啟 CSV 檔…</button>
+      <input type="file" id="offFile" accept=".csv,text/csv" hidden>
+      <span class="msg" id="offMsg"></span>
+    </div>
     <div class="live">
       <aside class="meters">
-        <div class="card big" style="--c: var(--s-p)">
+        <div class="card acc off-only" id="offInfo" style="display:none">
+          <h3 style="margin-bottom:6px" data-i18n="off.info">檔案資訊</h3>
+          <div id="offRows"></div>
+        </div>
+        <div class="card big live-only" style="--c: var(--s-p)">
           <div class="name"><span>POWER</span><span id="dirTag" class="hint"></span></div>
           <div class="value num"><span id="mP">—</span><span class="u">W</span></div>
           <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mPa">—</span> W</div>
         </div>
-        <div class="pair">
+        <div class="pair live-only">
           <div class="card big half" style="--c: var(--s-v)">
             <div class="name"><span>VBUS</span></div>
             <div class="value num"><span id="mV">—</span><span class="u">V</span></div>
@@ -302,13 +325,13 @@
             <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mIa">—</span> A</div>
           </div>
         </div>
-        <div class="mini">
+        <div class="mini live-only">
           <div style="--c: var(--s-dp)"><div class="k"><i></i>D+</div><div class="v num"><span id="mDp">—</span> V</div></div>
           <div style="--c: var(--s-dm)"><div class="k"><i></i>D−</div><div class="v num"><span id="mDm">—</span> V</div></div>
           <div style="--c: var(--s-cc1)"><div class="k"><i></i>CC1</div><div class="v num"><span id="mCc1">—</span> V</div></div>
           <div style="--c: var(--s-cc2)"><div class="k"><i></i>CC2</div><div class="v num"><span id="mCc2">—</span> V</div></div>
         </div>
-        <div class="card acc">
+        <div class="card acc live-only">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <h3 data-i18n="acc.title">累計（自啟動 / 歸零）</h3><button class="btn ghost" id="resetBtn" data-i18n="acc.reset">歸零</button>
           </div>
@@ -325,7 +348,7 @@
           <div class="row"><span data-i18n="bat.cap">電池容量</span><span><input type="number" id="bCap" min="1" step="100" class="num"> mAh</span></div>
           <div class="row"><span data-i18n="bat.volt">電芯電壓</span><span><input type="number" id="bVolt" min="0.1" step="0.05" class="num"> V</span></div>
           <div class="row"><span data-i18n="bat.eff">轉換效率</span><span><input type="number" id="bEff" min="1" max="100" step="1" class="num"> %</span></div>
-          <div class="row"><span data-i18n="bat.basis">依據</span><span><select id="bBasis"><option value="session" data-i18n="bat.basis.session">累計平均功率</option><option value="range" data-i18n="bat.basis.range">畫面區間平均</option></select></span></div>
+          <div class="row"><span data-i18n="bat.basis">依據</span><span><select id="bBasis"><option value="session" id="bBasisSession" data-i18n="bat.basis.session">累計平均功率</option><option value="range" data-i18n="bat.basis.range">畫面區間平均</option></select></span></div>
           <div class="row"><span data-i18n="bat.wh">可用能量</span><span class="num"><span id="bWh">—</span> Wh</span></div>
           <div class="row"><span data-i18n="bat.avgW">平均功率</span><span class="num"><span id="bW">—</span> W</span></div>
           <div class="runtime">
@@ -338,9 +361,9 @@
 
       <section class="card">
         <div class="panel-h">
-          <div><span class="lbl" data-i18n="win.label">時間窗</span><span class="seg" id="winSeg"></span></div>
+          <div class="live-only"><span class="lbl" data-i18n="win.label">時間窗</span><span class="seg" id="winSeg"></span></div>
           <span class="livebox" id="liveBox">
-            <span class="st-live live-pill"><span class="dot ok"></span><span data-i18n="live.on">即時</span></span>
+            <span class="st-live live-pill"><span class="dot ok"></span><span id="liveLbl" data-i18n="live.on">即時</span></span>
             <span class="st-frozen"><span class="live-pill off" data-i18n="live.frozen">⏸ 已凍結（檢視區間）</span><button class="btn" id="liveBtn" data-i18n="live.back">回到即時</button></span>
           </span>
           <div class="spacer"></div>
@@ -350,7 +373,7 @@
           </button>
         </div>
         <div class="rstats num" id="rstats"></div>
-        <div class="hint rhint" data-i18n="chart.hint">在圖上拖曳可放大區間（所有圖同步），雙擊回到即時。上方統計為目前畫面範圍。</div>
+        <div class="hint rhint" id="chartHint" data-i18n="chart.hint">在圖上拖曳可放大區間（所有圖同步），雙擊回到即時。上方統計為目前畫面範圍。</div>
         <div class="charts" id="charts"></div>
       </section>
     </div>
@@ -555,6 +578,7 @@ const LIVE_LAG_S = 0.1;  // trail the wall clock slightly so batched samples are
 function currentRange() {
   if (!B.t.length) return null;
   if (!live && view) return view;
+  if (offline) return [B.t[0], B.t[B.t.length - 1]];  // a loaded file: show all of it
   // While data is flowing, scroll with the wall clock for smooth motion; otherwise pin to the last sample.
   const last = B.t[B.t.length - 1], now = Date.now() / 1000 - LIVE_LAG_S;
   const end = now - last < 3 && now > last - 3 ? now : last;
@@ -564,7 +588,11 @@ function currentRange() {
 let lastStatsAt = 0;
 function redraw() {
   const r = currentRange();
-  if (!r) return;
+  if (!r) {  // nothing loaded (e.g. offline before a file is opened): blank the charts
+    rangeStats(0, 0);
+    for (const { u, c } of Object.values(plots)) { u.setData([[], ...c.series.map(() => [])]); showCursorValues(u, c); }
+    return;
+  }
   const lo = lowerBound(B.t, r[0]), hi = lowerBound(B.t, r[1] + 1e-6);
   // Stats are O(window) and only need ~4 Hz; the draw hook reads the cached rangeAvg.
   const t = performance.now();
@@ -622,9 +650,9 @@ function drawAvg(u, c) {
   ctx.restore();
 }
 
-function rangeStats(lo, hi) {
+/* Averages, min/max power, and trapezoid energy (Wh) / charge (Ah) over B[lo, hi); gaps > 2 s are skipped. */
+function statsOf(lo, hi) {
   const n = hi - lo;
-  if (n < 1) { $('rstats').innerHTML = ''; rangeAvg = null; return; }
   let sv = 0, si = 0, sp = 0, sdp = 0, sdm = 0, sc1 = 0, sc2 = 0, mx = -Infinity, mn = Infinity, e = 0, q = 0;
   for (let j = lo; j < hi; j++) {
     sv += B.v[j]; si += B.i[j]; sp += B.p[j];
@@ -632,10 +660,16 @@ function rangeStats(lo, hi) {
     if (B.p[j] > mx) mx = B.p[j]; if (B.p[j] < mn) mn = B.p[j];
     if (j > lo) { const dt = B.t[j] - B.t[j - 1]; if (dt > 0 && dt <= 2) { e += (B.p[j] + B.p[j - 1]) / 2 * dt; q += (B.i[j] + B.i[j - 1]) / 2 * dt; } }
   }
-  rangeAvg = { v: sv / n, i: si / n, p: sp / n, dp: sdp / n, dm: sdm / n, cc1: sc1 / n, cc2: sc2 / n };
-  const dur = B.t[hi - 1] - B.t[lo];
-  const cells = [['rs.dur', fmtDur(dur)], ['rs.n', n.toLocaleString()], ['rs.avgV', f(sv / n, 4)], ['rs.avgA', f(si / n, 5)],
-                 ['rs.avgW', f(sp / n, 4)], ['rs.minW', f(mn, 4)], ['rs.maxW', f(mx, 4)], ['rs.mWh', f(e / 3.6, 3)], ['rs.mAh', f(q / 3.6, 3)]]
+  return { n, dur: B.t[hi - 1] - B.t[lo], minW: mn, maxW: mx, Wh: e / 3600, Ah: q / 3600,
+           avg: { v: sv / n, i: si / n, p: sp / n, dp: sdp / n, dm: sdm / n, cc1: sc1 / n, cc2: sc2 / n } };
+}
+
+function rangeStats(lo, hi) {
+  if (hi - lo < 1) { $('rstats').innerHTML = ''; rangeAvg = null; return; }
+  const st = statsOf(lo, hi), a = st.avg;
+  rangeAvg = a;
+  const cells = [['rs.dur', fmtDur(st.dur)], ['rs.n', st.n.toLocaleString()], ['rs.avgV', f(a.v, 4)], ['rs.avgA', f(a.i, 5)],
+                 ['rs.avgW', f(a.p, 4)], ['rs.minW', f(st.minW, 4)], ['rs.maxW', f(st.maxW, 4)], ['rs.mWh', f(st.Wh * 1000, 3)], ['rs.mAh', f(st.Ah * 1000, 3)]]
     .map(([k, v]) => [t(k), v]);
   $('rstats').innerHTML = cells.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
 }
@@ -681,6 +715,7 @@ $('langSel').onchange = () => {
   if (lastMeter) renderMeter(lastMeter);
   if (lastDisk) renderDisk(...lastDisk);
   if (lastAlert) $('alertText').textContent = errMsg(lastAlert);
+  renderOffInfo();
   updateBattery();
   lastStatsAt = 0; redraw();
 };
@@ -716,13 +751,14 @@ let status = null;
 function renderStatus(s) {
   status = s;
   const inf = s.info || {};
+  setOfflineUi(!!s.offline);
   $('dot').classList.toggle('ok', s.connected);
-  $('devText').textContent = s.connected ? `${inf.model || 'KM003C'} · FW ${inf.fw_version || '?'}` : t('st.disconnected');
+  $('devText').textContent = s.offline ? t('st.offline') : s.connected ? `${inf.model || 'KM003C'} · FW ${inf.fw_version || '?'}` : t('st.disconnected');
   $('devChip').title = s.connected
     ? `${inf.model || 'KM003C'} · FW ${inf.fw_version || '?'} (${inf.fw_date || '?'}) · HW ${inf.hw_version || '?'} · SN ${inf.serial || '?'}` : '';
   $('modeChip').style.display = s.connected ? '' : 'none';
   $('modeChip').textContent = s.streaming ? t('st.stream', { sps: s.rates[s.rate_index] }) : t('st.compat');
-  $('banner').classList.toggle('on', !s.connected && !!s.error);
+  $('banner').classList.toggle('on', !s.connected && !s.offline && !!s.error);
   const err = s.error_code ? t('err.' + s.error_code, s.error_params) : s.error;
   $('banner').textContent = err ? '⚠ ' + err + t('st.retry') : '';
   $('rateSeg').innerHTML = Object.entries(s.rates).map(([k, v]) =>
@@ -767,8 +803,7 @@ function renderMeter(m) {
   const s = m.session;
   $('aT').textContent = fmtDur(s.duration_s); $('aAh').textContent = f(s.charge_Ah * 1000, 3); $('aWh').textContent = f(s.energy_Wh * 1000, 3);
   $('aW').textContent = f(s.avg_W, 4); $('aMax').textContent = f(s.max_W, 3); $('aDrop').textContent = m.dropped;
-  sessionAvgW = s.samples ? s.avg_W : null;
-  updateBattery();
+  if (!offline) { sessionAvgW = s.samples ? s.avg_W : null; updateBattery(); }
   // Keep every open tab in sync when another tab starts or stops a recording.
   const recName = m.recording ? m.recording.name : null;
   if (recName !== recording) {
@@ -800,6 +835,7 @@ const ICONS = {
   edit: '<svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L6 12H4v-2z"/></svg>',
   save: '<svg viewBox="0 0 16 16"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10"/></svg>',
   del:  '<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  view: '<svg viewBox="0 0 16 16"><path d="M2 13.5h12M3 10.5l3-3.5 2.5 2 4.5-5.5"/></svg>',
 };
 let records = [];
 function renderRecords(list) {
@@ -813,8 +849,9 @@ function renderRecords(list) {
       <td class="r num">${f(r.avg_V, 3)}</td><td class="r num">${f(r.avg_A, 4)}</td><td class="r num"><b>${f(r.avg_W, 4)}</b></td>
       <td class="r num">${f(r.min_W, 3)}</td><td class="r num">${f(r.max_W, 3)}</td><td class="r num">${f(r.energy_Wh * 1000, 3)}</td>
       <td class="r num">${f(r.charge_Ah * 1000, 3)}</td><td class="r num">${r.pd_messages}</td><td class="r num">${fmtBytes(r.size)}</td>
-      <td class="acts"><button class="icon" data-act="rename" title="${esc(t('rec.rename'))}">${ICONS.edit}</button><button class="icon" data-act="save" title="${esc(t('rec.save'))}">${ICONS.save}</button><button class="icon danger" data-act="delete" title="${esc(t('rec.delete'))}">${ICONS.del}</button></td></tr>`).join('')
+      <td class="acts"><button class="icon" data-act="view" title="${esc(t('rec.openOffline'))}">${ICONS.view}</button><button class="icon" data-act="rename" title="${esc(t('rec.rename'))}">${ICONS.edit}</button><button class="icon" data-act="save" title="${esc(t('rec.save'))}">${ICONS.save}</button><button class="icon danger" data-act="delete" title="${esc(t('rec.delete'))}">${ICONS.del}</button></td></tr>`).join('')
     : `<tr><td colspan="14" class="empty">${esc(t('rec.empty'))}</td></tr>`;
+  fillOffSel();
 }
 
 /* Save As: native save dialog where supported (Chrome/Edge), otherwise a normal download. */
@@ -860,7 +897,8 @@ $('recBody').onclick = async e => {
   const tr = e.target.closest('tr[data-k]'); if (!tr) return;
   const r = records[+tr.dataset.k];
   const act = e.target.closest('[data-act]')?.dataset.act || (e.target.closest('.fname') ? 'rename' : null);
-  if (act === 'rename') startRename(tr);
+  if (act === 'view') { if (await setMode(true)) { showTab('live'); loadOffline(r.name, (await fetch('/logs/' + encodeURIComponent(r.name))), r.size); } }
+  else if (act === 'rename') startRename(tr);
   else if (act === 'save') saveAs(r.name);
   else if (act === 'save-pd') saveAs(r.pd_file);
   else if (act === 'delete') {
@@ -927,11 +965,143 @@ $('pdBody').onclick = ev => { const tr = ev.target.closest('tr[data-n]'); if (!t
 $('hideCrc').onchange = renderPd;
 $('pdClear').onclick = async () => { await post('/api/pd/clear'); pdLog.length = 0; pdSel = null; renderPd(); renderPdDetail(null); };
 
+/* ================= offline review ================= */
+let offline = false, modeTarget = false, offFile = null, loadSeq = 0;
+// Labels that read differently while reviewing a file.
+const OFF_KEYS = [['tabLiveLbl', 'tab.live', 'tab.offline'], ['liveLbl', 'live.on', 'off.full'], ['liveBtn', 'live.back', 'off.showAll'],
+                  ['chartHint', 'chart.hint', 'chart.hintOff'], ['bBasisSession', 'bat.basis.session', 'off.basis']];
+function resetBuffer() { for (const k of KEYS) B[k] = []; for (const c of CHARTS) c.yr = null; rangeAvg = null; }
+async function setOfflineUi(on) {
+  if (on === modeTarget) return;  // status events repeat; switch once per change
+  modeTarget = on;
+  $('offMsg').className = 'msg';
+  document.body.classList.toggle('offline', on);
+  [...$('modeSeg').children].forEach(b => b.classList.toggle('on', (b.dataset.m === 'offline') === on));
+  for (const [id, a, b] of OFF_KEYS) { $(id).dataset.i18n = on ? b : a; $(id).textContent = t(on ? b : a); }
+  ++loadSeq; offFile = null; resetBuffer();
+  if (on) { offline = true; sessionAvgW = null; }
+  else {
+    // Keep dropping stream samples until the history snapshot is in, so nothing is appended twice.
+    const h = await (await fetch('/api/history')).json();
+    if (modeTarget) return;  // flipped back to offline meanwhile
+    resetBuffer(); append(h); offline = false;
+  }
+  renderOffInfo(); goLive();
+}
+async function setMode(off) {
+  if (off === modeTarget) return true;
+  const r = await post('/api/mode', { offline: off });
+  if (!r.ok) { alert(errMsg(r)); return false; }
+  await setOfflineUi(off);
+  return true;
+}
+$('modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m === 'offline'); };
+
+/* Streamed CSV parser for recording files (and the chart's "export view" CSV). Columns are found by header name. */
+async function parseCsv(stream, size, onProgress) {
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  let cap = 1 << 16, n = 0, idx = null, t0 = null, sumI = 0, read = 0, rest = '';
+  let col = Object.fromEntries(KEYS.map(k => [k, new Float64Array(cap)]));
+  const AUX = [['dp', 'dp_V'], ['dm', 'dm_V'], ['cc1', 'cc1_V'], ['cc2', 'cc2_V']];
+  const ts = s => Date.parse(s) / 1000;  // no offset = local time (recordings); trailing Z = UTC (exported view)
+  const row = line => {
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+    if (!line) return;
+    const x = line.split(',');
+    if (!idx) {
+      const h = x.map(s => s.trim().replace(/^﻿/, '')), at = k => h.indexOf(k);
+      idx = { ts: at('timestamp'), el: at('elapsed_s'), v: at('vbus_V'), i: at('ibus_A'), p: at('power_W'), aux: AUX.map(([, c]) => at(c)) };
+      const miss = [idx.v < 0 && 'vbus_V', idx.i < 0 && 'ibus_A', idx.ts < 0 && idx.el < 0 && 'timestamp'].filter(Boolean);
+      if (miss.length) throw new Error(t('off.badCsv', { cols: miss.join(', ') }));
+      return;
+    }
+    let tt;
+    if (idx.el >= 0) { const el = +x[idx.el]; if (t0 === null) t0 = (idx.ts >= 0 ? ts(x[idx.ts]) : 0) - el; tt = t0 + el; }
+    else tt = ts(x[idx.ts]);
+    const v = +x[idx.v], i = +x[idx.i];
+    if (!isFinite(tt) || !isFinite(v) || !isFinite(i)) return;
+    if (n === cap) { cap *= 2; for (const k of KEYS) { const a = new Float64Array(cap); a.set(col[k]); col[k] = a; } }
+    col.t[n] = tt; col.v[n] = v; col.i[n] = Math.abs(i);
+    col.p[n] = idx.p >= 0 ? Math.abs(+x[idx.p]) : Math.abs(v * i);
+    idx.aux.forEach((c, k) => { col[AUX[k][0]][n] = c >= 0 ? +x[c] || 0 : 0; });
+    sumI += i; n++;
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    read += value.length;
+    const lines = (rest + value).split('\n');
+    rest = lines.pop();
+    lines.forEach(row);
+    onProgress(size ? Math.min(99, Math.floor(read / size * 100)) : 0);
+  }
+  row(rest);
+  if (!n) throw new Error(t(idx ? 'off.noRows' : 'off.badCsv', { cols: 'vbus_V, ibus_A, timestamp' }));
+  const out = Object.fromEntries(KEYS.map(k => [k, col[k].subarray(0, n)]));
+  return { cols: out, meanI: sumI / n };
+}
+
+/* response: a fetch Response or a File; size is only used for the progress readout. */
+async function loadOffline(name, source, size) {
+  const my = ++loadSeq;
+  const msg = $('offMsg');
+  msg.className = 'msg'; msg.textContent = t('off.loading', { pct: 0 });
+  try {
+    if (source instanceof Response && !source.ok) throw new Error(t('err.download', { status: source.status }));
+    const d = await parseCsv(source instanceof Response ? source.body : source.stream(), size,
+                             pct => { if (my === loadSeq) msg.textContent = t('off.loading', { pct }); });
+    if (my !== loadSeq) return;
+    resetBuffer();
+    for (const k of KEYS) B[k] = d.cols[k];
+    offFile = { name, meanI: d.meanI };
+    $('offSel').value = records.some(r => r.name === name) ? name : '';
+    renderOffInfo(); goLive();
+  } catch (e) {
+    if (my !== loadSeq) return;
+    msg.className = 'msg err'; msg.textContent = t('off.err', { name, msg: e.message });
+  }
+}
+function fillOffSel() {
+  const cur = $('offSel').value;
+  $('offSel').innerHTML = `<option value="">${esc(t('off.pick'))}</option>` +
+    records.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join('');
+  $('offSel').value = records.some(r => r.name === cur) ? cur : '';
+}
+$('offSel').onchange = async () => {
+  const r = records.find(x => x.name === $('offSel').value);
+  if (r) loadOffline(r.name, await fetch('/logs/' + encodeURIComponent(r.name)), r.size);
+};
+$('offOpen').onclick = () => $('offFile').click();
+$('offFile').onchange = () => { const fl = $('offFile').files[0]; if (fl) loadOffline(fl.name, fl, fl.size); $('offFile').value = ''; };
+
+function renderOffInfo() {
+  $('offInfo').style.display = offFile ? '' : 'none';
+  if (!offFile) {
+    if (offline && !$('offMsg').classList.contains('err')) { $('offMsg').className = 'msg'; $('offMsg').textContent = t('off.empty'); }
+    updateBattery();
+    return;
+  }
+  const n = B.t.length, st = statsOf(0, n), a = st.avg, loc = LOCALES[lang];
+  const date = x => new Date(x * 1000).toLocaleString(loc);
+  const sps = n > 1 && st.dur > 0 ? (n - 1) / st.dur : null;
+  const dir = Math.abs(offFile.meanI) < 0.001 ? '—' : t(offFile.meanI < 0 ? 'dir.normal' : 'dir.reverse');
+  const rows = [['rec.h.start', date(B.t[0])], ['off.end', date(B.t[n - 1])], ['rec.h.dur', fmtDur(st.dur)], ['rs.n', n.toLocaleString()],
+                ['rate', sps ? `${sps >= 100 ? Math.round(sps) : sps.toFixed(1)} SPS` : '—'], ['rs.avgV', f(a.v, 4)], ['rs.avgA', f(a.i, 5)],
+                ['rs.avgW', f(a.p, 4)], ['rs.maxW', f(st.maxW, 4)], ['rs.mWh', f(st.Wh * 1000, 3)], ['rs.mAh', f(st.Ah * 1000, 3)], ['off.dir', dir]];
+  $('offRows').innerHTML = rows.map(([k, v]) => `<div class="row"><span>${esc(t(k))}</span><span class="num">${esc(v)}</span></div>`).join('');
+  $('offMsg').className = 'msg';
+  $('offMsg').innerHTML = `<b>${esc(offFile.name)}</b>`;
+  sessionAvgW = a.p;
+  updateBattery();
+}
+
 /* ================= tabs ================= */
-document.querySelector('.tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return;
-  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.id === 'tab-' + b.dataset.tab));
-  if (b.dataset.tab === 'live') { resize(); redraw(); } };
+function showTab(tab) {
+  document.querySelectorAll('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.id === 'tab-' + tab));
+  if (tab === 'live') { resize(); redraw(); }
+}
+document.querySelector('.tabs').onclick = e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); };
 
 /* ================= boot ================= */
 async function loadState() {
@@ -944,12 +1114,12 @@ setLiveUi();
 (async () => {
   await loadState();
   renderPdDetail(null);
-  append(await (await fetch('/api/history')).json());
+  if (!offline) append(await (await fetch('/api/history')).json());
   redraw();
   const es = new EventSource('/events');
   es.onmessage = ev => {
     const m = JSON.parse(ev.data);
-    if (m.type === 'samples') append(m);
+    if (m.type === 'samples') { if (!offline) append(m); }
     else if (m.type === 'meter') renderMeter(m);
     else if (m.type === 'status') renderStatus(m);
     else if (m.type === 'pd') { pdLog.push(...m.events); renderPd(); }
@@ -962,7 +1132,7 @@ let lastFrameAt = 0, frameGap = 0;
 const perf = { frames: 0, cost: 0 };
 function frame(ts) {
   requestAnimationFrame(frame);
-  if (!live || document.hidden || !document.querySelector('#tab-live.on') || ts - lastFrameAt < frameGap) return;
+  if (offline || !live || document.hidden || !document.querySelector('#tab-live.on') || ts - lastFrameAt < frameGap) return;
   lastFrameAt = ts;
   const t0 = performance.now();
   redraw();
