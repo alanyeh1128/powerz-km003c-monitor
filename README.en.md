@@ -33,7 +33,7 @@ A web dashboard for the [ChargerLAB POWER-Z KM003C](https://www.chargerlab.com/)
 The screenshot at the top shows the Live tab:
 
 - **Meters on the left**: POWER and VBUS / IBUS with the meter's own averages, plus the current direction in the top-right of the POWER card; below them, D+ / D− / CC1 / CC2 voltages.
-- **Totals**: time, charge (mAh), energy (mWh), average and peak power, temperature, and dropped samples (normally 0) since sampling started. "Stop sampling" below them pauses reading from the POWER-Z (USB stays connected) and disables recording; the same button then reads "Start sampling", which clears the totals, every curve on the charts and the PD log, then starts a fresh run. Sampling can't be stopped during a recording; saved recordings are never affected.
+- **Totals**: time, charge (mAh), energy (mWh), average and peak power, temperature, and dropped samples (normally 0) since sampling started. The ■ icon at the right of the card title stops sampling (USB stays connected) and disables recording; it then turns into ▶, which clears the totals, every curve on the charts and the PD log, then starts a fresh run. Sampling can't be stopped during a recording; saved recordings are never affected.
 - **Battery runtime estimate**: enter battery capacity, cell voltage and efficiency to estimate runtime at the average power (see [below](#battery-runtime-estimate)).
 - **Top-right corner**: sample rate (2 / 10 / 50 / 1k SPS), recording, language, and dark / light mode.
 - **Charts**: pick a time window (10 s to all). The colored buttons show or hide individual charts, and the icon at the far right exports the raw data of the visible range as CSV. The dashed line and "Avg." label on each chart are the average over the visible range.
