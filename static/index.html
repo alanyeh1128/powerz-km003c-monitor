@@ -304,25 +304,21 @@
     </div>
     <div class="live">
       <aside class="meters">
-        <div class="card acc off-only" id="offInfo" style="display:none">
-          <h3 style="margin-bottom:6px" data-i18n="off.info">檔案資訊</h3>
-          <div id="offRows"></div>
-        </div>
-        <div class="card big live-only" style="--c: var(--s-p)">
+        <div class="card big" style="--c: var(--s-p)">
           <div class="name"><span>POWER</span><span id="dirTag" class="hint"></span></div>
           <div class="value num"><span id="mP">—</span><span class="u">W</span></div>
-          <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mPa">—</span> W</div>
+          <div class="sub num live-only"><span data-i18n="m.avg">平均</span> <span id="mPa">—</span> W</div><div class="sub off-only offScope"></div>
         </div>
-        <div class="pair live-only">
+        <div class="pair">
           <div class="card big half" style="--c: var(--s-v)">
             <div class="name"><span>VBUS</span></div>
             <div class="value num"><span id="mV">—</span><span class="u">V</span></div>
-            <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mVa">—</span> V</div>
+            <div class="sub num live-only"><span data-i18n="m.avg">平均</span> <span id="mVa">—</span> V</div><div class="sub off-only offScope"></div>
           </div>
           <div class="card big half" style="--c: var(--s-i)">
             <div class="name"><span>IBUS</span></div>
             <div class="value num"><span id="mI">—</span><span class="u">A</span></div>
-            <div class="sub num"><span data-i18n="m.avg">平均</span> <span id="mIa">—</span> A</div>
+            <div class="sub num live-only"><span data-i18n="m.avg">平均</span> <span id="mIa">—</span> A</div><div class="sub off-only offScope"></div>
           </div>
         </div>
         <div class="mini live-only">
@@ -342,6 +338,10 @@
           <div class="row"><span data-i18n="acc.maxW">峰值功率</span><span class="num"><span id="aMax">—</span> W</span></div>
           <div class="row"><span data-i18n="acc.temp">溫度</span><span class="num"><span id="mTemp">—</span> °C</span></div>
           <div class="row"><span data-i18n="acc.dropped">遺失樣本</span><span class="num" id="aDrop">0</span></div>
+        </div>
+        <div class="card acc off-only" id="offInfo" style="display:none">
+          <h3 style="margin-bottom:6px" data-i18n="off.info">檔案資訊</h3>
+          <div id="offRows"></div>
         </div>
         <div class="card acc batt">
           <h3 style="margin-bottom:6px" data-i18n="bat.title">電池續航推算</h3>
@@ -596,7 +596,7 @@ function redraw() {
   const lo = lowerBound(B.t, r[0]), hi = lowerBound(B.t, r[1] + 1e-6);
   // Stats are O(window) and only need ~4 Hz; the draw hook reads the cached rangeAvg.
   const t = performance.now();
-  if (!live || t - lastStatsAt > 250) { rangeStats(lo, hi); lastStatsAt = t; }
+  if (!live || offline || t - lastStatsAt > 250) { rangeStats(lo, hi); lastStatsAt = t; }
   for (const { u, c, box } of Object.values(plots)) {
     if (box.classList.contains('hidden')) continue;
     u.batch(() => {
@@ -668,6 +668,7 @@ function rangeStats(lo, hi) {
   if (hi - lo < 1) { $('rstats').innerHTML = ''; rangeAvg = null; return; }
   const st = statsOf(lo, hi), a = st.avg;
   rangeAvg = a;
+  if (offline) renderOffMeters();
   const cells = [['rs.dur', fmtDur(st.dur)], ['rs.n', st.n.toLocaleString()], ['rs.avgV', f(a.v, 4)], ['rs.avgA', f(a.i, 5)],
                  ['rs.avgW', f(a.p, 4)], ['rs.minW', f(st.minW, 4)], ['rs.maxW', f(st.maxW, 4)], ['rs.mWh', f(st.Wh * 1000, 3)], ['rs.mAh', f(st.Ah * 1000, 3)]]
     .map(([k, v]) => [t(k), v]);
@@ -793,6 +794,7 @@ function updateBattery() {
 
 let lastMeter = null;
 function renderMeter(m) {
+  if (offline) return;  // a meter tick that raced the switch to offline
   lastMeter = m;
   $('mP').textContent = f(m.p, 3); $('mV').textContent = f(m.v, 3); $('mI').textContent = f(Math.abs(m.i), 4);
   $('mPa').textContent = f(m.p_avg, 3); $('mVa').textContent = f(m.v_avg, 3); $('mIa').textContent = f(Math.abs(m.i_avg), 4);
@@ -979,6 +981,7 @@ async function setOfflineUi(on) {
   [...$('modeSeg').children].forEach(b => b.classList.toggle('on', (b.dataset.m === 'offline') === on));
   for (const [id, a, b] of OFF_KEYS) { $(id).dataset.i18n = on ? b : a; $(id).textContent = t(on ? b : a); }
   ++loadSeq; offFile = null; resetBuffer();
+  for (const id of ['mP', 'mV', 'mI', 'dirTag']) $(id).textContent = id === 'dirTag' ? '' : '—';
   if (on) { offline = true; sessionAvgW = null; }
   else {
     // Keep dropping stream samples until the history snapshot is in, so nothing is appended twice.
@@ -1073,6 +1076,15 @@ $('offSel').onchange = async () => {
 };
 $('offOpen').onclick = () => $('offFile').click();
 $('offFile').onchange = () => { const fl = $('offFile').files[0]; if (fl) loadOffline(fl.name, fl, fl.size); $('offFile').value = ''; };
+
+/* Offline: the big POWER / VBUS / IBUS cards show averages over the visible range (the whole file until zoomed). */
+function renderOffMeters() {
+  const a = offline && offFile ? rangeAvg : null;
+  $('mP').textContent = f(a && a.p, 3); $('mV').textContent = f(a && a.v, 3); $('mI').textContent = f(a && a.i, 4);
+  const scope = a ? t(view ? 'off.scopeRange' : 'off.scopeFile') : '';
+  document.querySelectorAll('.offScope').forEach(el => el.textContent = scope);
+  $('dirTag').textContent = !a || Math.abs(offFile.meanI) < 0.001 ? '' : t(offFile.meanI < 0 ? 'dir.normal' : 'dir.reverse');
+}
 
 function renderOffInfo() {
   $('offInfo').style.display = offFile ? '' : 'none';
