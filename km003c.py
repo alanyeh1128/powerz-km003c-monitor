@@ -95,9 +95,24 @@ class KM003C:
     def _recv(self, timeout=TIMEOUT_MS) -> bytes:
         return bytes(self.dev.read(EP_IN, 4096, timeout=timeout))
 
+    def _reply(self, cmd) -> bytes:
+        """Read the reply to the request just sent, matched by transaction id.
+
+        The meter drops an idle session after ~4-5 s and queues an unsolicited Disconnect (type 0x03, its own
+        counter as tid); that packet only comes out with the next request. Without matching, every later reply
+        would be read one request late. The Disconnect and StreamingAuth replies don't echo our tid (Disconnect
+        carries the meter's counter, auth carries 0), so those two are matched by type instead."""
+        for _ in range(4):
+            r = self._recv()
+            if len(r) < 2:
+                continue
+            if r[1] == self._tid or (cmd in (CMD_DISCONNECT, CMD_STREAMING_AUTH) and (r[0] & 0x7F) == cmd):
+                return r
+        raise RuntimeError(f"no reply to command 0x{cmd:02x} (tid {self._tid})")
+
     def _ctrl(self, cmd, attr=0, payload=b"") -> bytes:
         self._send(cmd, struct.pack("<H", attr << 1), payload)
-        return self._recv()
+        return self._reply(cmd)
 
     def _drain(self):
         try:
@@ -128,7 +143,7 @@ class KM003C:
         pt = struct.pack("<III", addr, size, 0xFFFFFFFF)
         pt += struct.pack("<I", binascii.crc32(pt)) + b"\xff" * 16
         self._send(CMD_MEMORY_READ, b"\x01\x01", AES.new(MEM_KEY, AES.MODE_ECB).encrypt(pt))
-        buf = self._recv()
+        buf = self._reply(CMD_MEMORY_READ)
         if buf[0] != (CMD_MEMORY_READ | 0x80):
             raise RuntimeError(f"memory read rejected: {buf[:8].hex()}")
         need = (size + 15) // 16 * 16
@@ -173,7 +188,7 @@ class KM003C:
 
     def _ctrl_raw(self, cmd, word, payload=b"") -> bytes:
         self._send(cmd, word, payload)
-        return self._recv()
+        return self._reply(cmd)
 
     def close(self):
         if self.dev is None:

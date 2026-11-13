@@ -100,6 +100,7 @@ class Monitor:
         self._seq_anchor = None
         self.offline = False  # offline review: the meter is released and not polled
         self.paused = False   # sampling stopped by the user; the meter stays connected but idle
+        self._next_keepalive = 0.0
         self._halted = False  # the worker has actually stopped the stream for self.paused
         # Recording state
         self.rec_file = self.rec_writer = self.rec_name = self.rec_stats = None
@@ -124,6 +125,10 @@ class Monitor:
                         self.meter.stop_graph()
                         self.streaming, self._halted = False, True
                         self._broadcast({"type": "status", **self.status()})
+                    # The meter drops a session after ~4-5 s without requests; keep it alive (reading is discarded).
+                    if time.monotonic() >= self._next_keepalive:
+                        self._next_keepalive = time.monotonic() + 1.0
+                        self.meter.read_adc()
                     time.sleep(0.1)
                     continue
                 if self._halted:
