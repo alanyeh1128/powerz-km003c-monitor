@@ -99,6 +99,8 @@ class Monitor:
         self.pd_t0 = None
         self._seq_anchor = None
         self.offline = False  # offline review: the meter is released and not polled
+        self.paused = False   # sampling stopped by the user; the meter stays connected but idle
+        self._halted = False  # the worker has actually stopped the stream for self.paused
         # Recording state
         self.rec_file = self.rec_writer = self.rec_name = self.rec_stats = None
         self.records = self._load_records()
@@ -117,6 +119,18 @@ class Monitor:
                     continue
             try:
                 self._handle_commands()
+                if self.paused:
+                    if not self._halted:
+                        self.meter.stop_graph()
+                        self.streaming, self._halted = False, True
+                        self._broadcast({"type": "status", **self.status()})
+                    time.sleep(0.1)
+                    continue
+                if self._halted:
+                    self._halted = False
+                    self._start_stream()
+                    self._next_meter = self._next_pd = 0.0
+                    self._broadcast({"type": "status", **self.status()})
                 self._poll()
             except Exception as e:
                 self._disconnect("usb", f"USB 通訊錯誤：{e}", detail=str(e))
@@ -134,6 +148,7 @@ class Monitor:
             self._broadcast({"type": "status", **self.status()})
             return False
         self.connected = True
+        self._halted = False
         self._set_error(None, "")
         self.meter.stop_graph()
         t = self.meter.read_adc().temp
@@ -175,6 +190,10 @@ class Monitor:
             except queue.Empty:
                 return
             if cmd == "rate" and arg != self.rate_index:
+                if self._halted:  # stopped: just remember it for the next start
+                    self.rate_index = arg
+                    self._broadcast({"type": "status", **self.status()})
+                    continue
                 if self.streaming:
                     self.meter.stop_graph()
                 self.rate_index = arg
@@ -324,7 +343,7 @@ class Monitor:
         return {"connected": self.connected, "error": self.error, "error_code": self.error_code,
                 "error_params": self.error_params, "info": self.meter.info,
                 "streaming": self.streaming, "rate_index": self.rate_index,
-                "rates": GRAPH_RATES, "offline": self.offline}
+                "rates": GRAPH_RATES, "offline": self.offline, "paused": self.paused}
 
     def set_rate(self, idx):
         if idx not in GRAPH_RATES:
@@ -341,8 +360,19 @@ class Monitor:
         self._broadcast({"type": "status", **self.status()})
         return {"ok": True}
 
+    def set_paused(self, paused):
+        with self.lock:
+            if paused and self.rec_writer:
+                return fail("recording_pause", "錄製中無法停止取樣，請先停止錄製。")
+            self.paused = paused
+        # The worker stops / restarts the stream and broadcasts again once that's done.
+        self._broadcast({"type": "status", **self.status()})
+        return {"ok": True}
+
     def start_record(self, label):
         with self.lock:
+            if self.paused:
+                return fail("paused_no_record", "已停止取樣，無法錄製。請先按「開始取樣」。")
             if self.offline:
                 return fail("offline_no_record", "離線模式無法錄製")
             if self.rec_writer:
@@ -566,6 +596,7 @@ def make_handler(mon):
                 "/api/record/stop": mon.stop_record,
                 "/api/session/reset": mon.reset_session,
                 "/api/pd/clear": mon.clear_pd,
+                "/api/sampling": lambda: mon.set_paused(not body.get("run", True)),
                 "/api/mode": lambda: mon.set_offline(bool(body.get("offline"))),
                 "/api/rate": lambda: mon.set_rate(int(body.get("rate_index", -1))),
                 "/api/records/rename": lambda: mon.rename_record(str(body.get("name", "")), str(body.get("new_name", ""))),
